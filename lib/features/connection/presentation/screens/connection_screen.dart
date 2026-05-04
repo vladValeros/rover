@@ -20,6 +20,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   final TextEditingController _ipController = TextEditingController(
     text: AppConstants.defaultRoverIp,
   );
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -40,18 +41,18 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
             locator<DioClient>().updateBaseUrl(connection.roverIpAddress);
             context.go(RoverControlRoutes.path);
           },
+          testing: () => setState(() => _errorMessage = null),
+          loading: () => setState(() => _errorMessage = null),
           testSuccess: () {
+            setState(() => _errorMessage = null);
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('Rover reachable! Tap Connect to proceed.'),
+                backgroundColor: Colors.green,
               ),
             );
           },
-          failure: (message) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(message)),
-            );
-          },
+          failure: (message) => setState(() => _errorMessage = message),
         );
       },
       child: Scaffold(
@@ -90,6 +91,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                     prefixIcon: Icon(Icons.wifi),
                   ),
                   keyboardType: TextInputType.url,
+                  onChanged: (_) => setState(() => _errorMessage = null),
                 ),
                 const SizedBox(height: 16),
                 BlocBuilder<ConnectionCubit, RoverConnectionState>(
@@ -106,6 +108,35 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        if (_errorMessage != null) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.errorContainer,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Theme.of(context).colorScheme.onErrorContainer,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _errorMessage!,
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.onErrorContainer,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         OutlinedButton(
                           onPressed: isBusy
                               ? null
@@ -116,8 +147,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                               ? const SizedBox(
                                   height: 20,
                                   width: 20,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2),
+                                  child: CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Text('Test Connection'),
                         ),
@@ -132,8 +162,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                               ? const SizedBox(
                                   height: 20,
                                   width: 20,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2),
+                                  child: CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Text('Connect'),
                         ),

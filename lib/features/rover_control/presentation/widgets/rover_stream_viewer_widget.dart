@@ -4,11 +4,13 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../app/locator.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../ml_settings/domain/enums/object_detection_mode.dart';
+import '../controllers/rover_control_cubit.dart';
 import '../services/object_detection_service.dart';
 
 export '../../../ml_settings/domain/enums/object_detection_mode.dart';
@@ -226,6 +228,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
           i > startIndex) {
         final frame = Uint8List.fromList(buffer.sublist(startIndex, i + 2));
         buffer.removeRange(0, i + 2);
+        final recoveredFromFailure = _streamStatus != _StreamStatus.streaming;
         if (mounted) {
           setState(() {
             _currentFrame = frame;
@@ -237,6 +240,11 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
               _errorMessage = null;
             }
           });
+        }
+        if (recoveredFromFailure && mounted) {
+          unawaited(
+            context.read<RoverControlCubit>().reapplyLedStateAfterReconnect(),
+          );
         }
         _runDetectionIfNeeded(frame);
         return;

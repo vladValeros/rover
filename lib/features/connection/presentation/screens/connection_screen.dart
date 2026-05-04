@@ -52,6 +52,19 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               ),
             );
           },
+          discovered: (ipAddress) {
+            setState(() {
+              _errorMessage = null;
+              _ipController.text = ipAddress;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Rover found at $ipAddress'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          },
+          discovering: () => setState(() => _errorMessage = null),
           failure: (message) => setState(() => _errorMessage = message),
         );
       },
@@ -66,20 +79,19 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                 Text(
                   'Rover Control',
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   "Enter the rover's IP address",
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withAlpha(180),
-                      ),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withAlpha(180),
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 48),
@@ -99,10 +111,15 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                     final bool isBusy = state.maybeWhen(
                       loading: () => true,
                       testing: () => true,
+                      discovering: () => true,
                       orElse: () => false,
                     );
                     final bool isTesting = state.maybeWhen(
                       testing: () => true,
+                      orElse: () => false,
+                    );
+                    final bool isDiscovering = state.maybeWhen(
+                      discovering: () => true,
                       orElse: () => false,
                     );
                     return Column(
@@ -112,7 +129,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.errorContainer,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.errorContainer,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
@@ -120,7 +139,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                               children: [
                                 Icon(
                                   Icons.warning_amber_rounded,
-                                  color: Theme.of(context).colorScheme.onErrorContainer,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onErrorContainer,
                                   size: 20,
                                 ),
                                 const SizedBox(width: 8),
@@ -128,7 +149,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                                   child: Text(
                                     _errorMessage!,
                                     style: TextStyle(
-                                      color: Theme.of(context).colorScheme.onErrorContainer,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onErrorContainer,
                                     ),
                                   ),
                                 ),
@@ -137,17 +160,37 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                           ),
                           const SizedBox(height: 12),
                         ],
+                        OutlinedButton.icon(
+                          onPressed: isBusy
+                              ? null
+                              : () => context
+                                    .read<ConnectionCubit>()
+                                    .discoverRoverIp(),
+                          icon: isDiscovering
+                              ? const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.search),
+                          label: const Text('Auto Detect Rover'),
+                        ),
+                        const SizedBox(height: 12),
                         OutlinedButton(
                           onPressed: isBusy
                               ? null
                               : () => context
-                                  .read<ConnectionCubit>()
-                                  .testConnection(_ipController.text.trim()),
+                                    .read<ConnectionCubit>()
+                                    .testConnection(_ipController.text.trim()),
                           child: isTesting
                               ? const SizedBox(
                                   height: 20,
                                   width: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Text('Test Connection'),
                         ),
@@ -156,13 +199,15 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                           onPressed: isBusy
                               ? null
                               : () => context
-                                  .read<ConnectionCubit>()
-                                  .saveConnection(_ipController.text.trim()),
+                                    .read<ConnectionCubit>()
+                                    .saveConnection(_ipController.text.trim()),
                           child: isBusy && !isTesting
                               ? const SizedBox(
                                   height: 20,
                                   width: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Text('Connect'),
                         ),

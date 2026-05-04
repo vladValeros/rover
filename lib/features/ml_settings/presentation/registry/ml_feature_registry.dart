@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../../../ml_motion_patterns/presentation/widgets/motion_pattern_settings_card.dart';
 import '../../../ml_object_detection/domain/enums/object_detection_mode.dart';
 import '../../../ml_object_detection/presentation/widgets/object_detection_settings_card.dart';
 import '../../domain/entities/ml_settings_entity.dart';
@@ -35,13 +36,16 @@ const List<MlFeatureRegistration> mlFeatureRegistry = [
     buildSettingsCard: ObjectDetectionSettingsCard.new,
     isActive: _isObjectDetectionActive,
   ),
-  // MlFeatureRegistration(
-  //   id: 'motion_detection',
-  //   title: 'Motion Detection',
-  //   buildSettingsCard: MotionDetectionSettingsCard.new,
-  //   isActive: _isMotionDetectionActive,
-  // ),
+  MlFeatureRegistration(
+    id: 'motion_patterns',
+    title: 'Motion Patterns',
+    buildSettingsCard: MotionPatternSettingsCard.new,
+    isActive: _isMotionPatternsActive,
+  ),
 ];
 
 bool _isObjectDetectionActive(MlSettingsEntity settings) =>
     settings.objectDetection.mode != ObjectDetectionMode.off;
+
+bool _isMotionPatternsActive(MlSettingsEntity settings) =>
+    settings.motionPattern.enabled;

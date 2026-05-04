@@ -19,6 +19,7 @@ final _privateConstructorUsedError = UnsupportedError(
 mixin _$MlSettingsEntity {
   ObjectDetectionSettings get objectDetection =>
       throw _privateConstructorUsedError;
+  MotionPatternSettings get motionPattern => throw _privateConstructorUsedError;
 
   /// Create a copy of MlSettingsEntity
   /// with the given fields replaced by the non-null parameter values.
@@ -34,9 +35,13 @@ abstract class $MlSettingsEntityCopyWith<$Res> {
     $Res Function(MlSettingsEntity) then,
   ) = _$MlSettingsEntityCopyWithImpl<$Res, MlSettingsEntity>;
   @useResult
-  $Res call({ObjectDetectionSettings objectDetection});
+  $Res call({
+    ObjectDetectionSettings objectDetection,
+    MotionPatternSettings motionPattern,
+  });
 
   $ObjectDetectionSettingsCopyWith<$Res> get objectDetection;
+  $MotionPatternSettingsCopyWith<$Res> get motionPattern;
 }
 
 /// @nodoc
@@ -53,13 +58,17 @@ class _$MlSettingsEntityCopyWithImpl<$Res, $Val extends MlSettingsEntity>
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? objectDetection = null}) {
+  $Res call({Object? objectDetection = null, Object? motionPattern = null}) {
     return _then(
       _value.copyWith(
             objectDetection: null == objectDetection
                 ? _value.objectDetection
                 : objectDetection // ignore: cast_nullable_to_non_nullable
                       as ObjectDetectionSettings,
+            motionPattern: null == motionPattern
+                ? _value.motionPattern
+                : motionPattern // ignore: cast_nullable_to_non_nullable
+                      as MotionPatternSettings,
           )
           as $Val,
     );
@@ -76,6 +85,16 @@ class _$MlSettingsEntityCopyWithImpl<$Res, $Val extends MlSettingsEntity>
       return _then(_value.copyWith(objectDetection: value) as $Val);
     });
   }
+
+  /// Create a copy of MlSettingsEntity
+  /// with the given fields replaced by the non-null parameter values.
+  @override
+  @pragma('vm:prefer-inline')
+  $MotionPatternSettingsCopyWith<$Res> get motionPattern {
+    return $MotionPatternSettingsCopyWith<$Res>(_value.motionPattern, (value) {
+      return _then(_value.copyWith(motionPattern: value) as $Val);
+    });
+  }
 }
 
 /// @nodoc
@@ -87,10 +106,15 @@ abstract class _$$MlSettingsEntityImplCopyWith<$Res>
   ) = __$$MlSettingsEntityImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({ObjectDetectionSettings objectDetection});
+  $Res call({
+    ObjectDetectionSettings objectDetection,
+    MotionPatternSettings motionPattern,
+  });
 
   @override
   $ObjectDetectionSettingsCopyWith<$Res> get objectDetection;
+  @override
+  $MotionPatternSettingsCopyWith<$Res> get motionPattern;
 }
 
 /// @nodoc
@@ -106,13 +130,17 @@ class __$$MlSettingsEntityImplCopyWithImpl<$Res>
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? objectDetection = null}) {
+  $Res call({Object? objectDetection = null, Object? motionPattern = null}) {
     return _then(
       _$MlSettingsEntityImpl(
         objectDetection: null == objectDetection
             ? _value.objectDetection
             : objectDetection // ignore: cast_nullable_to_non_nullable
                   as ObjectDetectionSettings,
+        motionPattern: null == motionPattern
+            ? _value.motionPattern
+            : motionPattern // ignore: cast_nullable_to_non_nullable
+                  as MotionPatternSettings,
       ),
     );
   }
@@ -123,15 +151,19 @@ class __$$MlSettingsEntityImplCopyWithImpl<$Res>
 class _$MlSettingsEntityImpl implements _MlSettingsEntity {
   const _$MlSettingsEntityImpl({
     this.objectDetection = const ObjectDetectionSettings(),
+    this.motionPattern = const MotionPatternSettings(),
   });
 
   @override
   @JsonKey()
   final ObjectDetectionSettings objectDetection;
+  @override
+  @JsonKey()
+  final MotionPatternSettings motionPattern;
 
   @override
   String toString() {
-    return 'MlSettingsEntity(objectDetection: $objectDetection)';
+    return 'MlSettingsEntity(objectDetection: $objectDetection, motionPattern: $motionPattern)';
   }
 
   @override
@@ -140,11 +172,13 @@ class _$MlSettingsEntityImpl implements _MlSettingsEntity {
         (other.runtimeType == runtimeType &&
             other is _$MlSettingsEntityImpl &&
             (identical(other.objectDetection, objectDetection) ||
-                other.objectDetection == objectDetection));
+                other.objectDetection == objectDetection) &&
+            (identical(other.motionPattern, motionPattern) ||
+                other.motionPattern == motionPattern));
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, objectDetection);
+  int get hashCode => Object.hash(runtimeType, objectDetection, motionPattern);
 
   /// Create a copy of MlSettingsEntity
   /// with the given fields replaced by the non-null parameter values.
@@ -161,10 +195,13 @@ class _$MlSettingsEntityImpl implements _MlSettingsEntity {
 abstract class _MlSettingsEntity implements MlSettingsEntity {
   const factory _MlSettingsEntity({
     final ObjectDetectionSettings objectDetection,
+    final MotionPatternSettings motionPattern,
   }) = _$MlSettingsEntityImpl;
 
   @override
   ObjectDetectionSettings get objectDetection;
+  @override
+  MotionPatternSettings get motionPattern;
 
   /// Create a copy of MlSettingsEntity
   /// with the given fields replaced by the non-null parameter values.

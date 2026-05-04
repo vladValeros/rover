@@ -5,7 +5,9 @@ import '../../domain/entities/rover_command.dart';
 import '../controllers/rover_control_cubit.dart';
 
 class DirectionalPadWidget extends StatelessWidget {
-  const DirectionalPadWidget({super.key});
+  const DirectionalPadWidget({this.onManualOverride, super.key});
+
+  final VoidCallback? onManualOverride;
 
   @override
   Widget build(BuildContext context) {
@@ -16,6 +18,7 @@ class DirectionalPadWidget extends StatelessWidget {
           icon: Icons.arrow_upward,
           label: 'Forward',
           command: RoverCommand.forward,
+          onManualOverride: onManualOverride,
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -24,14 +27,16 @@ class DirectionalPadWidget extends StatelessWidget {
               icon: Icons.arrow_back,
               label: 'Left',
               command: RoverCommand.left,
+              onManualOverride: onManualOverride,
             ),
             const SizedBox(width: 8),
-            _StopButton(),
+            _StopButton(onManualOverride: onManualOverride),
             const SizedBox(width: 8),
             _DirectionButton(
               icon: Icons.arrow_forward,
               label: 'Right',
               command: RoverCommand.right,
+              onManualOverride: onManualOverride,
             ),
           ],
         ),
@@ -39,6 +44,7 @@ class DirectionalPadWidget extends StatelessWidget {
           icon: Icons.arrow_downward,
           label: 'Backward',
           command: RoverCommand.backward,
+          onManualOverride: onManualOverride,
         ),
       ],
     );
@@ -50,11 +56,13 @@ class _DirectionButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.command,
+    this.onManualOverride,
   });
 
   final IconData icon;
   final String label;
   final RoverCommand command;
+  final VoidCallback? onManualOverride;
 
   static const double _buttonSize = 80.0;
 
@@ -62,7 +70,10 @@ class _DirectionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final cubit = context.read<RoverControlCubit>();
     return GestureDetector(
-      onTapDown: (_) => cubit.sendCommand(command),
+      onTapDown: (_) {
+        onManualOverride?.call();
+        cubit.sendCommand(command);
+      },
       onTapUp: (_) => cubit.sendCommand(RoverCommand.stop),
       onTapCancel: () => cubit.sendCommand(RoverCommand.stop),
       child: Container(
@@ -96,13 +107,19 @@ class _DirectionButton extends StatelessWidget {
 }
 
 class _StopButton extends StatelessWidget {
+  const _StopButton({this.onManualOverride});
+
+  final VoidCallback? onManualOverride;
+
   static const double _buttonSize = 80.0;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () =>
-          context.read<RoverControlCubit>().sendCommand(RoverCommand.stop),
+      onTap: () {
+        onManualOverride?.call();
+        context.read<RoverControlCubit>().sendCommand(RoverCommand.stop);
+      },
       child: Container(
         width: _buttonSize,
         height: _buttonSize,

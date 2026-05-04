@@ -1,15 +1,21 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/locator.dart';
 import '../../../connection/connection_routes.dart';
+import '../../../ml_motion_patterns/data/services/motion_pattern_runner.dart';
+import '../../../ml_motion_patterns/domain/entities/motion_pattern_settings.dart';
+import '../../../ml_motion_patterns/domain/enums/motion_pattern_type.dart';
 import '../../../ml_object_detection/domain/enums/object_detection_mode.dart';
 import '../../../ml_settings/ml_settings_routes.dart';
 import '../../../ml_settings/presentation/controllers/ml_settings_cubit.dart';
 import '../../../ml_settings/presentation/controllers/ml_settings_state.dart';
 import '../controllers/rover_control_cubit.dart';
 import '../controllers/rover_control_state.dart';
+import '../../domain/entities/rover_command.dart';
 import '../widgets/directional_pad_widget.dart';
 import '../widgets/led_control_widget.dart';
 import '../widgets/rover_stream_viewer_widget.dart';
@@ -21,10 +27,41 @@ class RoverControlScreen extends StatefulWidget {
   State<RoverControlScreen> createState() => _RoverControlScreenState();
 }
 
-class _RoverControlScreenState extends State<RoverControlScreen> {
+class _RoverControlScreenState extends State<RoverControlScreen>
+    with WidgetsBindingObserver {
   StreamOrientationMode _orientationMode = StreamOrientationMode.normal;
   int _streamRefreshNonce = 0;
   bool _offlineSheetShown = false;
+  final MotionPatternRunner _motionPatternRunner = MotionPatternRunner();
+  bool _isMotionPatternRunning = false;
+  String _motionPatternStep = 'Idle';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _motionPatternRunner.stop();
+      if (mounted) {
+        setState(() {
+          _isMotionPatternRunning = false;
+          _motionPatternStep = 'Idle';
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _motionPatternRunner.stop();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +113,10 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
               IconButton(
                 icon: const Icon(Icons.wifi_off),
                 tooltip: 'Disconnect',
-                onPressed: () => context.go(ConnectionRoutes.path),
+                onPressed: () {
+                  _stopMotionPattern(context, sendStopCommand: true);
+                  context.go(ConnectionRoutes.path);
+                },
               ),
             ],
           ),
@@ -154,8 +194,24 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
-                      const DirectionalPadWidget(),
+                      const SizedBox(height: 12),
+                      // ── Motion pattern quick-start (near D-pad) ──────────
+                      _MotionPatternRuntimeCard(
+                        settings: mlSettings?.motionPattern,
+                        isRunning: _isMotionPatternRunning,
+                        stepLabel: _motionPatternStep,
+                        onStart: () {
+                          final settings = mlSettings?.motionPattern;
+                          if (settings == null || !settings.enabled) return;
+                          _startMotionPattern(context, settings);
+                        },
+                        onStop: () =>
+                            _stopMotionPattern(context, sendStopCommand: true),
+                      ),
+                      const SizedBox(height: 16),
+                      DirectionalPadWidget(
+                        onManualOverride: _onManualControlOverride,
+                      ),
                       const SizedBox(height: 16),
                       const LedControlWidget(),
                     ],
@@ -179,10 +235,12 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
       enableDrag: false,
       builder: (sheetCtx) => _RoverOfflineSheet(
         onRetry: () {
+          _stopMotionPattern(context, sendStopCommand: true);
           Navigator.of(sheetCtx).pop();
           setState(() => _streamRefreshNonce++);
         },
         onGoBack: () {
+          _stopMotionPattern(context, sendStopCommand: true);
           Navigator.of(sheetCtx).pop();
           context.go(ConnectionRoutes.path);
         },
@@ -190,6 +248,174 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
     ).whenComplete(() {
       if (mounted) _offlineSheetShown = false;
     });
+  }
+
+  void _onManualControlOverride() {
+    if (!_isMotionPatternRunning) return;
+    _motionPatternRunner.stop();
+    if (mounted) {
+      setState(() {
+        _isMotionPatternRunning = false;
+        _motionPatternStep = 'Manual override';
+      });
+    }
+  }
+
+  void _startMotionPattern(
+    BuildContext context,
+    MotionPatternSettings settings,
+  ) {
+    if (_isMotionPatternRunning || !settings.enabled) return;
+    final cubit = context.read<RoverControlCubit>();
+    setState(() {
+      _isMotionPatternRunning = true;
+      _motionPatternStep = 'Starting ${settings.pattern.label}';
+    });
+
+    unawaited(
+      _motionPatternRunner
+          .start(
+            settings: settings,
+            sendCommand: cubit.sendCommand,
+            onStep: (stepLabel) {
+              if (!mounted) return;
+              setState(() => _motionPatternStep = stepLabel);
+            },
+          )
+          .whenComplete(() {
+            if (!mounted) return;
+            setState(() {
+              _isMotionPatternRunning = false;
+              if (_motionPatternStep != 'Manual override') {
+                _motionPatternStep = 'Idle';
+              }
+            });
+          }),
+    );
+  }
+
+  void _stopMotionPattern(
+    BuildContext context, {
+    required bool sendStopCommand,
+  }) {
+    if (!_isMotionPatternRunning && !_motionPatternRunner.isRunning) return;
+    _motionPatternRunner.stop();
+    if (sendStopCommand) {
+      unawaited(
+        context.read<RoverControlCubit>().sendCommand(RoverCommand.stop),
+      );
+    }
+    if (mounted) {
+      setState(() {
+        _isMotionPatternRunning = false;
+        _motionPatternStep = 'Idle';
+      });
+    }
+  }
+}
+
+class _MotionPatternRuntimeCard extends StatelessWidget {
+  const _MotionPatternRuntimeCard({
+    required this.settings,
+    required this.isRunning,
+    required this.stepLabel,
+    required this.onStart,
+    required this.onStop,
+  });
+
+  final MotionPatternSettings? settings;
+  final bool isRunning;
+  final String stepLabel;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final isEnabled = settings?.enabled ?? false;
+    final patternLabel = settings?.pattern.label ?? 'Unknown';
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.route, size: 18, color: cs.primary),
+                const SizedBox(width: 8),
+                Text('Motion Pattern AI', style: tt.titleSmall),
+                const Spacer(),
+                _StatePill(isRunning: isRunning, enabled: isEnabled),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              isEnabled
+                  ? 'Pattern: $patternLabel | Step: $stepLabel'
+                  : 'Enable Motion Patterns from ML Settings first.',
+              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: isEnabled && !isRunning ? onStart : null,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Start Pattern'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: isRunning ? onStop : null,
+                    icon: const Icon(Icons.stop),
+                    label: const Text('Stop Pattern'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatePill extends StatelessWidget {
+  const _StatePill({required this.isRunning, required this.enabled});
+
+  final bool isRunning;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final String label = !enabled
+        ? 'Disabled'
+        : (isRunning ? 'Running' : 'Ready');
+    final Color bg = !enabled
+        ? cs.surfaceContainerHighest
+        : (isRunning ? cs.primaryContainer : cs.tertiaryContainer);
+    final Color fg = !enabled
+        ? cs.onSurfaceVariant
+        : (isRunning ? cs.onPrimaryContainer : cs.onTertiaryContainer);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: fg),
+      ),
+    );
   }
 }
 

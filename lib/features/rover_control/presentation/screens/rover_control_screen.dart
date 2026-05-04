@@ -19,6 +19,7 @@ class RoverControlScreen extends StatefulWidget {
 
 class _RoverControlScreenState extends State<RoverControlScreen> {
   StreamOrientationMode _orientationMode = StreamOrientationMode.normal;
+  int _streamRefreshNonce = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +42,21 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
             elevation: 0,
             actions: [
               IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh Connection',
+                onPressed: () {
+                  setState(() {
+                    _streamRefreshNonce++;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Refreshing rover connection...'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
                 icon: const Icon(Icons.wifi_off),
                 tooltip: 'Disconnect',
                 onPressed: () => context.go(ConnectionRoutes.path),
@@ -52,7 +68,10 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
                 children: [
-                  RoverStreamViewerWidget(orientationMode: _orientationMode),
+                  RoverStreamViewerWidget(
+                    orientationMode: _orientationMode,
+                    refreshNonce: _streamRefreshNonce,
+                  ),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,

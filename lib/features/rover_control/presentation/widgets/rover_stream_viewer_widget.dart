@@ -12,9 +12,14 @@ import '../../../../core/network/dio_client.dart';
 enum StreamOrientationMode { normal, rotate180, rotate180Mirrored }
 
 class RoverStreamViewerWidget extends StatefulWidget {
-  const RoverStreamViewerWidget({required this.orientationMode, super.key});
+  const RoverStreamViewerWidget({
+    required this.orientationMode,
+    this.refreshNonce = 0,
+    super.key,
+  });
 
   final StreamOrientationMode orientationMode;
+  final int refreshNonce;
 
   @override
   State<RoverStreamViewerWidget> createState() =>
@@ -22,27 +27,54 @@ class RoverStreamViewerWidget extends StatefulWidget {
 }
 
 class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
+  static const Duration _watchdogInterval = Duration(seconds: 2);
+  static const Duration _freezeThreshold = Duration(seconds: 6);
+  static const Duration _autoReconnectDelay = Duration(seconds: 1);
+
   Uint8List? _currentFrame;
   StreamSubscription<Uint8List>? _streamSubscription;
   bool _hasError = false;
   String? _errorMessage;
   String? _streamEndpoint;
   CancelToken? _cancelToken;
+  Timer? _watchdogTimer;
+  Timer? _reconnectTimer;
+  DateTime? _lastFrameAt;
+  bool _isStarting = false;
 
   @override
   void initState() {
     super.initState();
+    _watchdogTimer = Timer.periodic(_watchdogInterval, (_) {
+      _checkForFreeze();
+    });
     _startStream();
+  }
+
+  @override
+  void didUpdateWidget(covariant RoverStreamViewerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.refreshNonce != oldWidget.refreshNonce) {
+      _restartStream('Manual refresh requested');
+    }
   }
 
   @override
   void dispose() {
     _cancelToken?.cancel();
     _streamSubscription?.cancel();
+    _watchdogTimer?.cancel();
+    _reconnectTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _startStream() async {
+    if (_isStarting) {
+      return;
+    }
+    _isStarting = true;
+
+    _reconnectTimer?.cancel();
     _cancelToken?.cancel();
     await _streamSubscription?.cancel();
 
@@ -50,6 +82,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
       _hasError = false;
       _currentFrame = null;
       _errorMessage = null;
+      _lastFrameAt = null;
     });
 
     try {
@@ -88,28 +121,19 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
               _extractFrames(buffer);
             },
             onError: (error) {
-              if (mounted) {
-                setState(() {
-                  _hasError = true;
-                  _errorMessage = error.toString();
-                });
-              }
+              _onStreamFailure(error.toString());
             },
+            onDone: () {
+              _onStreamFailure('Stream ended unexpectedly. Reconnecting...');
+            },
+            cancelOnError: true,
           );
     } on DioException catch (e) {
-      if (mounted) {
-        setState(() {
-          _hasError = true;
-          _errorMessage = e.message ?? e.type.name;
-        });
-      }
+      _onStreamFailure(e.message ?? e.type.name);
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _hasError = true;
-          _errorMessage = e.toString();
-        });
-      }
+      _onStreamFailure(e.toString());
+    } finally {
+      _isStarting = false;
     }
   }
 
@@ -127,11 +151,65 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         final frame = Uint8List.fromList(buffer.sublist(startIndex, i + 2));
         buffer.removeRange(0, i + 2);
         if (mounted) {
-          setState(() => _currentFrame = frame);
+          setState(() {
+            _currentFrame = frame;
+            _lastFrameAt = DateTime.now();
+            if (_hasError) {
+              _hasError = false;
+              _errorMessage = null;
+            }
+          });
         }
         return;
       }
     }
+  }
+
+  void _checkForFreeze() {
+    if (!mounted || _hasError || _currentFrame == null || _isStarting) {
+      return;
+    }
+
+    final lastFrameAt = _lastFrameAt;
+    if (lastFrameAt == null) {
+      return;
+    }
+
+    final elapsed = DateTime.now().difference(lastFrameAt);
+    if (elapsed > _freezeThreshold) {
+      _restartStream('Stream frozen. Reconnecting...');
+    }
+  }
+
+  void _onStreamFailure(String message) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _hasError = true;
+      _errorMessage = message;
+    });
+    _scheduleReconnect();
+  }
+
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(_autoReconnectDelay, () {
+      if (mounted) {
+        _startStream();
+      }
+    });
+  }
+
+  void _restartStream(String reason) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _hasError = true;
+      _errorMessage = reason;
+    });
+    _startStream();
   }
 
   @override

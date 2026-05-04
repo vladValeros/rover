@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/locator.dart';
 import '../../../connection/connection_routes.dart';
+import '../../../ml_object_detection/domain/enums/object_detection_mode.dart';
 import '../../../ml_settings/ml_settings_routes.dart';
 import '../../../ml_settings/presentation/controllers/ml_settings_cubit.dart';
 import '../../../ml_settings/presentation/controllers/ml_settings_state.dart';

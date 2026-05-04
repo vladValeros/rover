@@ -18,9 +18,7 @@ class RawDetection {
   final double confidence;
 }
 
-/// MLKit object detection service isolated under ML feature.
-///
-/// Rover control should only consume this service and never own ML internals.
+/// MLKit object detection service isolated in ml_object_detection feature.
 class ObjectDetectionService {
   mlkit.ObjectDetector? _detector;
   bool _unavailable = false;

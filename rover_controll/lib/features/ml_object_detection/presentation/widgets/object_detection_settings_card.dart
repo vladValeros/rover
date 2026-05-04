@@ -1,19 +1,15 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../domain/entities/ml_settings_entity.dart';
+import '../../../ml_settings/presentation/controllers/ml_settings_cubit.dart';
+import '../../../ml_settings/presentation/controllers/ml_settings_state.dart';
+import '../../domain/entities/object_detection_settings.dart';
 import '../../domain/enums/object_detection_mode.dart';
-import '../controllers/ml_settings_cubit.dart';
-import '../controllers/ml_settings_state.dart';
-import 'ml_feature_card.dart';
+import '../../../ml_settings/presentation/widgets/ml_feature_card.dart';
 
 /// Settings card for the Object Detection ML feature.
-///
-/// To add a new ML feature:
-///   1. Add entity + enum under `ml_settings/domain/`.
-///   2. Add `updateXxx()` on [MlSettingsCubit].
-///   3. Create a new `XxxSettingsCard` following this file as a template.
-///   4. Register it in [MlSettingsScreen].
 class ObjectDetectionSettingsCard extends StatelessWidget {
   const ObjectDetectionSettingsCard({super.key});
 
@@ -47,10 +43,6 @@ class ObjectDetectionSettingsCard extends StatelessWidget {
     );
   }
 }
-
-// ── Settings body ─────────────────────────────────────────────────────────────
-// StatefulWidget so the confidence slider tracks local drag value without
-// firing a Cubit update on every frame.
 
 class _ObjectDetectionBody extends StatefulWidget {
   const _ObjectDetectionBody({required this.settings, required this.cubit});
@@ -89,7 +81,6 @@ class _ObjectDetectionBodyState extends State<_ObjectDetectionBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Detection Mode ──────────────────────────────────────────────────
         _SectionLabel(label: 'Detection Mode', colorScheme: colorScheme),
         const SizedBox(height: 8),
         Wrap(
@@ -119,10 +110,7 @@ class _ObjectDetectionBodyState extends State<_ObjectDetectionBody> {
             ),
           ],
         ),
-
         const SizedBox(height: 20),
-
-        // ── Confidence Threshold ────────────────────────────────────────────
         Row(
           children: [
             _SectionLabel(label: 'Confidence', colorScheme: colorScheme),
@@ -146,10 +134,7 @@ class _ObjectDetectionBodyState extends State<_ObjectDetectionBody> {
             s.copyWith(confidenceThreshold: v),
           ),
         ),
-
         const SizedBox(height: 12),
-
-        // ── Detection Rate ──────────────────────────────────────────────────
         Row(
           children: [
             _SectionLabel(label: 'Detection Rate', colorScheme: colorScheme),
@@ -175,10 +160,7 @@ class _ObjectDetectionBodyState extends State<_ObjectDetectionBody> {
             ),
           ],
         ),
-
         const SizedBox(height: 8),
-
-        // ── Diagnostics Overlay ─────────────────────────────────────────────
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: Text('Diagnostics Overlay', style: textTheme.labelLarge),
@@ -194,8 +176,6 @@ class _ObjectDetectionBodyState extends State<_ObjectDetectionBody> {
     );
   }
 }
-
-// ── Shared helpers ────────────────────────────────────────────────────────────
 
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel({required this.label, required this.colorScheme});

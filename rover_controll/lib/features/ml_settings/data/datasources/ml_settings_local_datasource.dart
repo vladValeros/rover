@@ -1,8 +1,9 @@
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../ml_object_detection/domain/entities/object_detection_settings.dart';
+import '../../../ml_object_detection/domain/enums/object_detection_mode.dart';
 import '../../domain/entities/ml_settings_entity.dart';
-import '../../domain/enums/object_detection_mode.dart';
 
 @lazySingleton
 class MlSettingsLocalDatasource {

@@ -52,6 +52,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   static const Duration _freezeThreshold = Duration(seconds: 6);
   static const Duration _autoReconnectDelay = Duration(seconds: 1);
   static const Duration _inferenceInterval = Duration(milliseconds: 800);
+  static const Duration _streamConnectTimeout = Duration(seconds: 20);
 
   Uint8List? _currentFrame;
   StreamSubscription<Uint8List>? _streamSubscription;
@@ -136,14 +137,18 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
 
       _streamEndpoint = streamUri.toString();
 
-      final response = await dio.getUri<ResponseBody>(
-        streamUri,
-        options: Options(
-          responseType: ResponseType.stream,
-          // Keep stream open for a long-lived MJPEG connection.
+      final streamDio = Dio(
+        BaseOptions(
+          connectTimeout: _streamConnectTimeout,
+          sendTimeout: _streamConnectTimeout,
           receiveTimeout: const Duration(minutes: 5),
+          responseType: ResponseType.stream,
           headers: const {'Accept': 'multipart/x-mixed-replace'},
         ),
+      );
+
+      final response = await streamDio.getUri<ResponseBody>(
+        streamUri,
         cancelToken: _cancelToken,
       );
 
@@ -526,9 +531,14 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
                       horizontal: 4,
                       vertical: 2,
                     ),
-                    child: Text(
-                      '${detection.label} ${(detection.confidence * 100).toStringAsFixed(0)}%',
-                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                    child: _buildReadableOverlayText(
+                      child: Text(
+                        '${detection.label} ${(detection.confidence * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -598,5 +608,24 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         ],
       ),
     );
+  }
+
+  Widget _buildReadableOverlayText({required Widget child}) {
+    switch (widget.orientationMode) {
+      case StreamOrientationMode.normal:
+        return Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.rotationY(math.pi),
+          child: RotatedBox(quarterTurns: 2, child: child),
+        );
+      case StreamOrientationMode.rotate180:
+        return Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.rotationY(math.pi),
+          child: child,
+        );
+      case StreamOrientationMode.rotate180Mirrored:
+        return child;
+    }
   }
 }

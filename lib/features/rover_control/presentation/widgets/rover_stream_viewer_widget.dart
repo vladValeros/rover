@@ -1,18 +1,14 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart'
-    as mlkit;
-import 'package:image/image.dart' as img;
 
 import '../../../../app/locator.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/dio_client.dart';
+import '../services/object_detection_service.dart';
 
 enum StreamOrientationMode { normal, rotate180, rotate180Mirrored }
 
@@ -35,12 +31,22 @@ class RoverStreamViewerWidget extends StatefulWidget {
     required this.orientationMode,
     required this.detectionMode,
     this.refreshNonce = 0,
+    this.detectionConfidenceThreshold = 0.45,
+    this.detectionIntervalMs = 800,
+    this.minDetectionArea = 0.002,
+    this.showDiagnostics = true,
+    this.onMlUnavailable,
     super.key,
   });
 
   final StreamOrientationMode orientationMode;
   final ObjectDetectionMode detectionMode;
   final int refreshNonce;
+  final double detectionConfidenceThreshold;
+  final int detectionIntervalMs;
+  final double minDetectionArea;
+  final bool showDiagnostics;
+  final ValueChanged<String>? onMlUnavailable;
 
   @override
   State<RoverStreamViewerWidget> createState() =>
@@ -51,7 +57,6 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   static const Duration _watchdogInterval = Duration(seconds: 2);
   static const Duration _freezeThreshold = Duration(seconds: 6);
   static const Duration _autoReconnectDelay = Duration(seconds: 1);
-  static const Duration _inferenceInterval = Duration(milliseconds: 800);
   static const Duration _streamConnectTimeout = Duration(seconds: 20);
 
   Uint8List? _currentFrame;
@@ -69,8 +74,12 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   List<DetectionOverlayBox> _detections = const [];
   int _lastInferenceMs = 0;
   String? _detectionError;
-  mlkit.ObjectDetector? _objectDetector;
   bool _mlUnavailable = false;
+  int _processedInferenceCount = 0;
+  int _skippedInferenceCount = 0;
+  int _totalInferenceMs = 0;
+  int _reconnectCount = 0;
+  final ObjectDetectionService _detectionService = ObjectDetectionService();
 
   @override
   void initState() {
@@ -102,7 +111,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
     _streamSubscription?.cancel();
     _watchdogTimer?.cancel();
     _reconnectTimer?.cancel();
-    _objectDetector?.close();
+    _detectionService.dispose();
     super.dispose();
   }
 
@@ -217,8 +226,9 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
 
     final now = DateTime.now();
     final lastInferenceAt = _lastInferenceAt;
-    if (lastInferenceAt != null &&
-        now.difference(lastInferenceAt) < _inferenceInterval) {
+    final interval = Duration(milliseconds: widget.detectionIntervalMs);
+    if (lastInferenceAt != null && now.difference(lastInferenceAt) < interval) {
+      _skippedInferenceCount++;
       return;
     }
 
@@ -227,54 +237,37 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
 
     final watch = Stopwatch()..start();
     try {
-      final detector = await _ensureDetector();
-      if (detector == null) {
+      final rawDetections = await _detectionService.detect(
+        frame,
+        confidenceThreshold: widget.detectionConfidenceThreshold,
+      );
+
+      if (_detectionService.isUnavailable) {
+        const message =
+            'ML plugin not available in current runtime. '
+            'Stop app and run full rebuild (flutter clean; flutter run).';
+        _disableMlForSession('detector', message);
         return;
       }
-
-      final file = File('${Directory.systemTemp.path}/rover_frame_ml.jpg');
-      await file.writeAsBytes(frame, flush: true);
-
-      final decoded = img.decodeJpg(frame);
-      if (decoded == null) {
-        return;
-      }
-
-      final inputImage = mlkit.InputImage.fromFilePath(file.path);
-      final objects = await detector.processImage(inputImage);
 
       final mapped = <DetectionOverlayBox>[];
-      for (final object in objects) {
-        final label = object.labels.isNotEmpty
-            ? object.labels.first.text
-            : 'Object';
-        final confidence = object.labels.isNotEmpty
-            ? object.labels.first.confidence
-            : 0;
-
+      for (final detection in rawDetections) {
+        final label = _normalizeLabel(detection.label);
         if (!_shouldIncludeLabel(label)) {
           continue;
         }
 
-        final rect = object.boundingBox;
-        final normalizedLeft = (rect.left / decoded.width).clamp(0.0, 1.0);
-        final normalizedTop = (rect.top / decoded.height).clamp(0.0, 1.0);
-        final normalizedWidth = (rect.width / decoded.width).clamp(0.0, 1.0);
-        final normalizedHeight = (rect.height / decoded.height).clamp(0.0, 1.0);
-        if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+        final area =
+            detection.normalizedRect.width * detection.normalizedRect.height;
+        if (area < widget.minDetectionArea) {
           continue;
         }
 
         mapped.add(
           DetectionOverlayBox(
-            normalizedRect: Rect.fromLTWH(
-              normalizedLeft,
-              normalizedTop,
-              normalizedWidth,
-              normalizedHeight,
-            ),
+            normalizedRect: detection.normalizedRect,
             label: label,
-            confidence: confidence.toDouble(),
+            confidence: detection.confidence,
           ),
         );
       }
@@ -285,11 +278,6 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
           _detectionError = null;
         });
       }
-    } on MissingPluginException {
-      const message =
-          'ML plugin not available in current runtime. '
-          'Stop app and run full rebuild (flutter clean; flutter run).';
-      _disableMlForSession('detector', message);
     } catch (e) {
       _logError('detector', e.toString());
       if (mounted) {
@@ -302,55 +290,11 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
       if (mounted) {
         setState(() {
           _lastInferenceMs = watch.elapsedMilliseconds;
+          _processedInferenceCount++;
+          _totalInferenceMs += watch.elapsedMilliseconds;
         });
       }
       _isDetecting = false;
-    }
-  }
-
-  Future<mlkit.ObjectDetector?> _ensureDetector() async {
-    if (_mlUnavailable) {
-      return null;
-    }
-
-    if (_objectDetector != null) {
-      return _objectDetector;
-    }
-
-    if (!(Platform.isAndroid || Platform.isIOS)) {
-      const message =
-          'Object detection is only supported on Android/iOS for this build.';
-      _logError('detector-init', message);
-      if (mounted) {
-        setState(() {
-          _detectionError = message;
-        });
-      }
-      return null;
-    }
-
-    try {
-      final options = mlkit.ObjectDetectorOptions(
-        mode: mlkit.DetectionMode.single,
-        classifyObjects: true,
-        multipleObjects: true,
-      );
-      _objectDetector = mlkit.ObjectDetector(options: options);
-      return _objectDetector;
-    } on MissingPluginException {
-      const message =
-          'ML plugin not available in current app runtime. '
-          'Stop the app and run a full rebuild (not hot reload).';
-      _disableMlForSession('detector-init', message);
-      return null;
-    } catch (e) {
-      _logError('detector-init', e.toString());
-      if (mounted) {
-        setState(() {
-          _detectionError = 'Detector unavailable: $e';
-        });
-      }
-      return null;
     }
   }
 
@@ -405,6 +349,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(_autoReconnectDelay, () {
       if (mounted) {
+        _reconnectCount++;
         _startStream();
       }
     });
@@ -427,8 +372,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
 
   void _disableMlForSession(String source, String message) {
     _logError(source, message);
-    _objectDetector?.close();
-    _objectDetector = null;
+    _detectionService.dispose();
     _mlUnavailable = true;
     if (mounted) {
       setState(() {
@@ -436,6 +380,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         _detectionError = '$message\nML is disabled until app restart.';
       });
     }
+    widget.onMlUnavailable?.call(message);
   }
 
   @override
@@ -573,7 +518,8 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         fit: StackFit.expand,
         children: [
           orientedImage,
-          if (widget.detectionMode != ObjectDetectionMode.off)
+          if (widget.detectionMode != ObjectDetectionMode.off &&
+              widget.showDiagnostics)
             Positioned(
               right: 8,
               top: 8,
@@ -584,7 +530,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  'ML ${_lastInferenceMs}ms | ${_detections.length} obj',
+                  'ML ${_lastInferenceMs}ms avg:${_averageInferenceMs().toStringAsFixed(0)} | obj:${_detections.length} P:${_processedInferenceCount} S:${_skippedInferenceCount} R:${_reconnectCount}',
                   style: const TextStyle(color: Colors.white, fontSize: 11),
                 ),
               ),
@@ -627,5 +573,31 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
       case StreamOrientationMode.rotate180Mirrored:
         return child;
     }
+  }
+
+  String _normalizeLabel(String raw) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('person') || lower.contains('human')) {
+      return 'Person';
+    }
+    if (lower.contains('car') ||
+        lower.contains('vehicle') ||
+        lower.contains('truck') ||
+        lower.contains('bus') ||
+        lower.contains('motorcycle') ||
+        lower.contains('bike')) {
+      return 'Vehicle';
+    }
+    if (raw.isEmpty) {
+      return 'Object';
+    }
+    return raw;
+  }
+
+  double _averageInferenceMs() {
+    if (_processedInferenceCount == 0) {
+      return 0;
+    }
+    return _totalInferenceMs / _processedInferenceCount;
   }
 }

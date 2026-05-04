@@ -9,8 +9,12 @@ import '../../../../app/locator.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/dio_client.dart';
 
+enum StreamOrientationMode { normal, rotate180, rotate180Mirrored }
+
 class RoverStreamViewerWidget extends StatefulWidget {
-  const RoverStreamViewerWidget({super.key});
+  const RoverStreamViewerWidget({required this.orientationMode, super.key});
+
+  final StreamOrientationMode orientationMode;
 
   @override
   State<RoverStreamViewerWidget> createState() =>
@@ -189,20 +193,30 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
       );
     }
 
-    return AspectRatio(
-      aspectRatio: 4 / 3,
-      child: Transform(
-        alignment: Alignment.center,
-        transform: Matrix4.rotationY(math.pi),
-        child: RotatedBox(
-          quarterTurns: 2,
-          child: Image.memory(
-            _currentFrame!,
-            gaplessPlayback: true,
-            fit: BoxFit.cover,
-          ),
-        ),
-      ),
+    final image = Image.memory(
+      _currentFrame!,
+      gaplessPlayback: true,
+      fit: BoxFit.cover,
     );
+
+    Widget orientedImage;
+    switch (widget.orientationMode) {
+      case StreamOrientationMode.normal:
+        orientedImage = Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.rotationY(math.pi),
+          child: RotatedBox(quarterTurns: 2, child: image),
+        );
+      case StreamOrientationMode.rotate180:
+        orientedImage = Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.rotationY(math.pi),
+          child: image,
+        );
+      case StreamOrientationMode.rotate180Mirrored:
+        orientedImage = image;
+    }
+
+    return AspectRatio(aspectRatio: 4 / 3, child: orientedImage);
   }
 }

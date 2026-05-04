@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'app/app.dart';
+import 'app/locator.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await configureLocator();
+  runApp(const RoverApp());
 }
 
 class MyApp extends StatelessWidget {

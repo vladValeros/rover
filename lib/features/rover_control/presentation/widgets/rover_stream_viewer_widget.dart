@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -20,6 +21,8 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   Uint8List? _currentFrame;
   StreamSubscription<Uint8List>? _streamSubscription;
   bool _hasError = false;
+  String? _errorMessage;
+  String? _streamEndpoint;
   CancelToken? _cancelToken;
 
   @override
@@ -36,23 +39,37 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   }
 
   Future<void> _startStream() async {
+    _cancelToken?.cancel();
+    await _streamSubscription?.cancel();
+
     setState(() {
       _hasError = false;
       _currentFrame = null;
+      _errorMessage = null;
     });
 
     try {
       _cancelToken = CancelToken();
       final dio = locator<DioClient>().dio;
       final baseUrl = dio.options.baseUrl;
-      final streamUrl = baseUrl.replaceFirst(
-        ':${AppConstants.controlPort}',
-        ':${AppConstants.streamPort}',
+      final fallbackBaseUrl =
+          'http://${AppConstants.defaultRoverIp}:${AppConstants.controlPort}';
+      final controlUri = Uri.parse(baseUrl.isEmpty ? fallbackBaseUrl : baseUrl);
+      final streamUri = controlUri.replace(
+        port: AppConstants.streamPort,
+        path: '/stream',
       );
 
-      final response = await dio.get<ResponseBody>(
-        '${streamUrl.isEmpty ? 'http://${AppConstants.defaultRoverIp}:${AppConstants.streamPort}' : '$streamUrl/stream'.replaceFirst('//', '/')}/stream',
-        options: Options(responseType: ResponseType.stream),
+      _streamEndpoint = streamUri.toString();
+
+      final response = await dio.getUri<ResponseBody>(
+        streamUri,
+        options: Options(
+          responseType: ResponseType.stream,
+          // Keep stream open for a long-lived MJPEG connection.
+          receiveTimeout: const Duration(minutes: 5),
+          headers: const {'Accept': 'multipart/x-mixed-replace'},
+        ),
         cancelToken: _cancelToken,
       );
 
@@ -66,12 +83,29 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
               buffer.addAll(chunk);
               _extractFrames(buffer);
             },
-            onError: (_) {
-              if (mounted) setState(() => _hasError = true);
+            onError: (error) {
+              if (mounted) {
+                setState(() {
+                  _hasError = true;
+                  _errorMessage = error.toString();
+                });
+              }
             },
           );
-    } catch (_) {
-      if (mounted) setState(() => _hasError = true);
+    } on DioException catch (e) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = e.message ?? e.type.name;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = e.toString();
+        });
+      }
     }
   }
 
@@ -118,6 +152,25 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
                   color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
+              if (_streamEndpoint != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  _streamEndpoint!,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    _errorMessage!,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               TextButton(onPressed: _startStream, child: const Text('Retry')),
             ],
@@ -138,10 +191,17 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
 
     return AspectRatio(
       aspectRatio: 4 / 3,
-      child: Image.memory(
-        _currentFrame!,
-        gaplessPlayback: true,
-        fit: BoxFit.cover,
+      child: Transform(
+        alignment: Alignment.center,
+        transform: Matrix4.rotationY(math.pi),
+        child: RotatedBox(
+          quarterTurns: 2,
+          child: Image.memory(
+            _currentFrame!,
+            gaplessPlayback: true,
+            fit: BoxFit.cover,
+          ),
+        ),
       ),
     );
   }

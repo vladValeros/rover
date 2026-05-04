@@ -5,6 +5,7 @@ import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart
     as mlkit;
 import 'package:image/image.dart' as img;
 
+/// Raw detector result used by stream overlay mapping.
 class RawDetection {
   const RawDetection({
     required this.normalizedRect,
@@ -17,6 +18,9 @@ class RawDetection {
   final double confidence;
 }
 
+/// MLKit object detection service isolated under ML feature.
+///
+/// Rover control should only consume this service and never own ML internals.
 class ObjectDetectionService {
   mlkit.ObjectDetector? _detector;
   bool _unavailable = false;

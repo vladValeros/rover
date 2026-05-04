@@ -9,9 +9,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../app/locator.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../ml_settings/data/services/object_detection_service.dart';
 import '../../../ml_settings/domain/enums/object_detection_mode.dart';
 import '../controllers/rover_control_cubit.dart';
-import '../services/object_detection_service.dart';
 
 export '../../../ml_settings/domain/enums/object_detection_mode.dart';
 

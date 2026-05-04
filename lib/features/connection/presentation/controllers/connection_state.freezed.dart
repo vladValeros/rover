@@ -24,6 +24,8 @@ mixin _$RoverConnectionState {
     required TResult Function(ConnectionEntity connection) loaded,
     required TResult Function() testing,
     required TResult Function() testSuccess,
+    required TResult Function() discovering,
+    required TResult Function(String ipAddress) discovered,
     required TResult Function(ConnectionEntity connection) saved,
     required TResult Function(String message) failure,
   }) => throw _privateConstructorUsedError;
@@ -34,6 +36,8 @@ mixin _$RoverConnectionState {
     TResult? Function(ConnectionEntity connection)? loaded,
     TResult? Function()? testing,
     TResult? Function()? testSuccess,
+    TResult? Function()? discovering,
+    TResult? Function(String ipAddress)? discovered,
     TResult? Function(ConnectionEntity connection)? saved,
     TResult? Function(String message)? failure,
   }) => throw _privateConstructorUsedError;
@@ -44,6 +48,8 @@ mixin _$RoverConnectionState {
     TResult Function(ConnectionEntity connection)? loaded,
     TResult Function()? testing,
     TResult Function()? testSuccess,
+    TResult Function()? discovering,
+    TResult Function(String ipAddress)? discovered,
     TResult Function(ConnectionEntity connection)? saved,
     TResult Function(String message)? failure,
     required TResult orElse(),
@@ -55,6 +61,8 @@ mixin _$RoverConnectionState {
     required TResult Function(_Loaded value) loaded,
     required TResult Function(_Testing value) testing,
     required TResult Function(_TestSuccess value) testSuccess,
+    required TResult Function(_Discovering value) discovering,
+    required TResult Function(_Discovered value) discovered,
     required TResult Function(_Saved value) saved,
     required TResult Function(_Failure value) failure,
   }) => throw _privateConstructorUsedError;
@@ -65,6 +73,8 @@ mixin _$RoverConnectionState {
     TResult? Function(_Loaded value)? loaded,
     TResult? Function(_Testing value)? testing,
     TResult? Function(_TestSuccess value)? testSuccess,
+    TResult? Function(_Discovering value)? discovering,
+    TResult? Function(_Discovered value)? discovered,
     TResult? Function(_Saved value)? saved,
     TResult? Function(_Failure value)? failure,
   }) => throw _privateConstructorUsedError;
@@ -75,6 +85,8 @@ mixin _$RoverConnectionState {
     TResult Function(_Loaded value)? loaded,
     TResult Function(_Testing value)? testing,
     TResult Function(_TestSuccess value)? testSuccess,
+    TResult Function(_Discovering value)? discovering,
+    TResult Function(_Discovered value)? discovered,
     TResult Function(_Saved value)? saved,
     TResult Function(_Failure value)? failure,
     required TResult orElse(),
@@ -154,6 +166,8 @@ class _$InitialImpl implements _Initial {
     required TResult Function(ConnectionEntity connection) loaded,
     required TResult Function() testing,
     required TResult Function() testSuccess,
+    required TResult Function() discovering,
+    required TResult Function(String ipAddress) discovered,
     required TResult Function(ConnectionEntity connection) saved,
     required TResult Function(String message) failure,
   }) {
@@ -168,6 +182,8 @@ class _$InitialImpl implements _Initial {
     TResult? Function(ConnectionEntity connection)? loaded,
     TResult? Function()? testing,
     TResult? Function()? testSuccess,
+    TResult? Function()? discovering,
+    TResult? Function(String ipAddress)? discovered,
     TResult? Function(ConnectionEntity connection)? saved,
     TResult? Function(String message)? failure,
   }) {
@@ -182,6 +198,8 @@ class _$InitialImpl implements _Initial {
     TResult Function(ConnectionEntity connection)? loaded,
     TResult Function()? testing,
     TResult Function()? testSuccess,
+    TResult Function()? discovering,
+    TResult Function(String ipAddress)? discovered,
     TResult Function(ConnectionEntity connection)? saved,
     TResult Function(String message)? failure,
     required TResult orElse(),
@@ -200,6 +218,8 @@ class _$InitialImpl implements _Initial {
     required TResult Function(_Loaded value) loaded,
     required TResult Function(_Testing value) testing,
     required TResult Function(_TestSuccess value) testSuccess,
+    required TResult Function(_Discovering value) discovering,
+    required TResult Function(_Discovered value) discovered,
     required TResult Function(_Saved value) saved,
     required TResult Function(_Failure value) failure,
   }) {
@@ -214,6 +234,8 @@ class _$InitialImpl implements _Initial {
     TResult? Function(_Loaded value)? loaded,
     TResult? Function(_Testing value)? testing,
     TResult? Function(_TestSuccess value)? testSuccess,
+    TResult? Function(_Discovering value)? discovering,
+    TResult? Function(_Discovered value)? discovered,
     TResult? Function(_Saved value)? saved,
     TResult? Function(_Failure value)? failure,
   }) {
@@ -228,6 +250,8 @@ class _$InitialImpl implements _Initial {
     TResult Function(_Loaded value)? loaded,
     TResult Function(_Testing value)? testing,
     TResult Function(_TestSuccess value)? testSuccess,
+    TResult Function(_Discovering value)? discovering,
+    TResult Function(_Discovered value)? discovered,
     TResult Function(_Saved value)? saved,
     TResult Function(_Failure value)? failure,
     required TResult orElse(),
@@ -291,6 +315,8 @@ class _$LoadingImpl implements _Loading {
     required TResult Function(ConnectionEntity connection) loaded,
     required TResult Function() testing,
     required TResult Function() testSuccess,
+    required TResult Function() discovering,
+    required TResult Function(String ipAddress) discovered,
     required TResult Function(ConnectionEntity connection) saved,
     required TResult Function(String message) failure,
   }) {
@@ -305,6 +331,8 @@ class _$LoadingImpl implements _Loading {
     TResult? Function(ConnectionEntity connection)? loaded,
     TResult? Function()? testing,
     TResult? Function()? testSuccess,
+    TResult? Function()? discovering,
+    TResult? Function(String ipAddress)? discovered,
     TResult? Function(ConnectionEntity connection)? saved,
     TResult? Function(String message)? failure,
   }) {
@@ -319,6 +347,8 @@ class _$LoadingImpl implements _Loading {
     TResult Function(ConnectionEntity connection)? loaded,
     TResult Function()? testing,
     TResult Function()? testSuccess,
+    TResult Function()? discovering,
+    TResult Function(String ipAddress)? discovered,
     TResult Function(ConnectionEntity connection)? saved,
     TResult Function(String message)? failure,
     required TResult orElse(),
@@ -337,6 +367,8 @@ class _$LoadingImpl implements _Loading {
     required TResult Function(_Loaded value) loaded,
     required TResult Function(_Testing value) testing,
     required TResult Function(_TestSuccess value) testSuccess,
+    required TResult Function(_Discovering value) discovering,
+    required TResult Function(_Discovered value) discovered,
     required TResult Function(_Saved value) saved,
     required TResult Function(_Failure value) failure,
   }) {
@@ -351,6 +383,8 @@ class _$LoadingImpl implements _Loading {
     TResult? Function(_Loaded value)? loaded,
     TResult? Function(_Testing value)? testing,
     TResult? Function(_TestSuccess value)? testSuccess,
+    TResult? Function(_Discovering value)? discovering,
+    TResult? Function(_Discovered value)? discovered,
     TResult? Function(_Saved value)? saved,
     TResult? Function(_Failure value)? failure,
   }) {
@@ -365,6 +399,8 @@ class _$LoadingImpl implements _Loading {
     TResult Function(_Loaded value)? loaded,
     TResult Function(_Testing value)? testing,
     TResult Function(_TestSuccess value)? testSuccess,
+    TResult Function(_Discovering value)? discovering,
+    TResult Function(_Discovered value)? discovered,
     TResult Function(_Saved value)? saved,
     TResult Function(_Failure value)? failure,
     required TResult orElse(),
@@ -468,6 +504,8 @@ class _$LoadedImpl implements _Loaded {
     required TResult Function(ConnectionEntity connection) loaded,
     required TResult Function() testing,
     required TResult Function() testSuccess,
+    required TResult Function() discovering,
+    required TResult Function(String ipAddress) discovered,
     required TResult Function(ConnectionEntity connection) saved,
     required TResult Function(String message) failure,
   }) {
@@ -482,6 +520,8 @@ class _$LoadedImpl implements _Loaded {
     TResult? Function(ConnectionEntity connection)? loaded,
     TResult? Function()? testing,
     TResult? Function()? testSuccess,
+    TResult? Function()? discovering,
+    TResult? Function(String ipAddress)? discovered,
     TResult? Function(ConnectionEntity connection)? saved,
     TResult? Function(String message)? failure,
   }) {
@@ -496,6 +536,8 @@ class _$LoadedImpl implements _Loaded {
     TResult Function(ConnectionEntity connection)? loaded,
     TResult Function()? testing,
     TResult Function()? testSuccess,
+    TResult Function()? discovering,
+    TResult Function(String ipAddress)? discovered,
     TResult Function(ConnectionEntity connection)? saved,
     TResult Function(String message)? failure,
     required TResult orElse(),
@@ -514,6 +556,8 @@ class _$LoadedImpl implements _Loaded {
     required TResult Function(_Loaded value) loaded,
     required TResult Function(_Testing value) testing,
     required TResult Function(_TestSuccess value) testSuccess,
+    required TResult Function(_Discovering value) discovering,
+    required TResult Function(_Discovered value) discovered,
     required TResult Function(_Saved value) saved,
     required TResult Function(_Failure value) failure,
   }) {
@@ -528,6 +572,8 @@ class _$LoadedImpl implements _Loaded {
     TResult? Function(_Loaded value)? loaded,
     TResult? Function(_Testing value)? testing,
     TResult? Function(_TestSuccess value)? testSuccess,
+    TResult? Function(_Discovering value)? discovering,
+    TResult? Function(_Discovered value)? discovered,
     TResult? Function(_Saved value)? saved,
     TResult? Function(_Failure value)? failure,
   }) {
@@ -542,6 +588,8 @@ class _$LoadedImpl implements _Loaded {
     TResult Function(_Loaded value)? loaded,
     TResult Function(_Testing value)? testing,
     TResult Function(_TestSuccess value)? testSuccess,
+    TResult Function(_Discovering value)? discovering,
+    TResult Function(_Discovered value)? discovered,
     TResult Function(_Saved value)? saved,
     TResult Function(_Failure value)? failure,
     required TResult orElse(),
@@ -613,6 +661,8 @@ class _$TestingImpl implements _Testing {
     required TResult Function(ConnectionEntity connection) loaded,
     required TResult Function() testing,
     required TResult Function() testSuccess,
+    required TResult Function() discovering,
+    required TResult Function(String ipAddress) discovered,
     required TResult Function(ConnectionEntity connection) saved,
     required TResult Function(String message) failure,
   }) {
@@ -627,6 +677,8 @@ class _$TestingImpl implements _Testing {
     TResult? Function(ConnectionEntity connection)? loaded,
     TResult? Function()? testing,
     TResult? Function()? testSuccess,
+    TResult? Function()? discovering,
+    TResult? Function(String ipAddress)? discovered,
     TResult? Function(ConnectionEntity connection)? saved,
     TResult? Function(String message)? failure,
   }) {
@@ -641,6 +693,8 @@ class _$TestingImpl implements _Testing {
     TResult Function(ConnectionEntity connection)? loaded,
     TResult Function()? testing,
     TResult Function()? testSuccess,
+    TResult Function()? discovering,
+    TResult Function(String ipAddress)? discovered,
     TResult Function(ConnectionEntity connection)? saved,
     TResult Function(String message)? failure,
     required TResult orElse(),
@@ -659,6 +713,8 @@ class _$TestingImpl implements _Testing {
     required TResult Function(_Loaded value) loaded,
     required TResult Function(_Testing value) testing,
     required TResult Function(_TestSuccess value) testSuccess,
+    required TResult Function(_Discovering value) discovering,
+    required TResult Function(_Discovered value) discovered,
     required TResult Function(_Saved value) saved,
     required TResult Function(_Failure value) failure,
   }) {
@@ -673,6 +729,8 @@ class _$TestingImpl implements _Testing {
     TResult? Function(_Loaded value)? loaded,
     TResult? Function(_Testing value)? testing,
     TResult? Function(_TestSuccess value)? testSuccess,
+    TResult? Function(_Discovering value)? discovering,
+    TResult? Function(_Discovered value)? discovered,
     TResult? Function(_Saved value)? saved,
     TResult? Function(_Failure value)? failure,
   }) {
@@ -687,6 +745,8 @@ class _$TestingImpl implements _Testing {
     TResult Function(_Loaded value)? loaded,
     TResult Function(_Testing value)? testing,
     TResult Function(_TestSuccess value)? testSuccess,
+    TResult Function(_Discovering value)? discovering,
+    TResult Function(_Discovered value)? discovered,
     TResult Function(_Saved value)? saved,
     TResult Function(_Failure value)? failure,
     required TResult orElse(),
@@ -750,6 +810,8 @@ class _$TestSuccessImpl implements _TestSuccess {
     required TResult Function(ConnectionEntity connection) loaded,
     required TResult Function() testing,
     required TResult Function() testSuccess,
+    required TResult Function() discovering,
+    required TResult Function(String ipAddress) discovered,
     required TResult Function(ConnectionEntity connection) saved,
     required TResult Function(String message) failure,
   }) {
@@ -764,6 +826,8 @@ class _$TestSuccessImpl implements _TestSuccess {
     TResult? Function(ConnectionEntity connection)? loaded,
     TResult? Function()? testing,
     TResult? Function()? testSuccess,
+    TResult? Function()? discovering,
+    TResult? Function(String ipAddress)? discovered,
     TResult? Function(ConnectionEntity connection)? saved,
     TResult? Function(String message)? failure,
   }) {
@@ -778,6 +842,8 @@ class _$TestSuccessImpl implements _TestSuccess {
     TResult Function(ConnectionEntity connection)? loaded,
     TResult Function()? testing,
     TResult Function()? testSuccess,
+    TResult Function()? discovering,
+    TResult Function(String ipAddress)? discovered,
     TResult Function(ConnectionEntity connection)? saved,
     TResult Function(String message)? failure,
     required TResult orElse(),
@@ -796,6 +862,8 @@ class _$TestSuccessImpl implements _TestSuccess {
     required TResult Function(_Loaded value) loaded,
     required TResult Function(_Testing value) testing,
     required TResult Function(_TestSuccess value) testSuccess,
+    required TResult Function(_Discovering value) discovering,
+    required TResult Function(_Discovered value) discovered,
     required TResult Function(_Saved value) saved,
     required TResult Function(_Failure value) failure,
   }) {
@@ -810,6 +878,8 @@ class _$TestSuccessImpl implements _TestSuccess {
     TResult? Function(_Loaded value)? loaded,
     TResult? Function(_Testing value)? testing,
     TResult? Function(_TestSuccess value)? testSuccess,
+    TResult? Function(_Discovering value)? discovering,
+    TResult? Function(_Discovered value)? discovered,
     TResult? Function(_Saved value)? saved,
     TResult? Function(_Failure value)? failure,
   }) {
@@ -824,6 +894,8 @@ class _$TestSuccessImpl implements _TestSuccess {
     TResult Function(_Loaded value)? loaded,
     TResult Function(_Testing value)? testing,
     TResult Function(_TestSuccess value)? testSuccess,
+    TResult Function(_Discovering value)? discovering,
+    TResult Function(_Discovered value)? discovered,
     TResult Function(_Saved value)? saved,
     TResult Function(_Failure value)? failure,
     required TResult orElse(),
@@ -837,6 +909,340 @@ class _$TestSuccessImpl implements _TestSuccess {
 
 abstract class _TestSuccess implements RoverConnectionState {
   const factory _TestSuccess() = _$TestSuccessImpl;
+}
+
+/// @nodoc
+abstract class _$$DiscoveringImplCopyWith<$Res> {
+  factory _$$DiscoveringImplCopyWith(
+    _$DiscoveringImpl value,
+    $Res Function(_$DiscoveringImpl) then,
+  ) = __$$DiscoveringImplCopyWithImpl<$Res>;
+}
+
+/// @nodoc
+class __$$DiscoveringImplCopyWithImpl<$Res>
+    extends _$RoverConnectionStateCopyWithImpl<$Res, _$DiscoveringImpl>
+    implements _$$DiscoveringImplCopyWith<$Res> {
+  __$$DiscoveringImplCopyWithImpl(
+    _$DiscoveringImpl _value,
+    $Res Function(_$DiscoveringImpl) _then,
+  ) : super(_value, _then);
+
+  /// Create a copy of RoverConnectionState
+  /// with the given fields replaced by the non-null parameter values.
+}
+
+/// @nodoc
+
+class _$DiscoveringImpl implements _Discovering {
+  const _$DiscoveringImpl();
+
+  @override
+  String toString() {
+    return 'RoverConnectionState.discovering()';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is _$DiscoveringImpl);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function() initial,
+    required TResult Function() loading,
+    required TResult Function(ConnectionEntity connection) loaded,
+    required TResult Function() testing,
+    required TResult Function() testSuccess,
+    required TResult Function() discovering,
+    required TResult Function(String ipAddress) discovered,
+    required TResult Function(ConnectionEntity connection) saved,
+    required TResult Function(String message) failure,
+  }) {
+    return discovering();
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function()? initial,
+    TResult? Function()? loading,
+    TResult? Function(ConnectionEntity connection)? loaded,
+    TResult? Function()? testing,
+    TResult? Function()? testSuccess,
+    TResult? Function()? discovering,
+    TResult? Function(String ipAddress)? discovered,
+    TResult? Function(ConnectionEntity connection)? saved,
+    TResult? Function(String message)? failure,
+  }) {
+    return discovering?.call();
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function()? initial,
+    TResult Function()? loading,
+    TResult Function(ConnectionEntity connection)? loaded,
+    TResult Function()? testing,
+    TResult Function()? testSuccess,
+    TResult Function()? discovering,
+    TResult Function(String ipAddress)? discovered,
+    TResult Function(ConnectionEntity connection)? saved,
+    TResult Function(String message)? failure,
+    required TResult orElse(),
+  }) {
+    if (discovering != null) {
+      return discovering();
+    }
+    return orElse();
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(_Initial value) initial,
+    required TResult Function(_Loading value) loading,
+    required TResult Function(_Loaded value) loaded,
+    required TResult Function(_Testing value) testing,
+    required TResult Function(_TestSuccess value) testSuccess,
+    required TResult Function(_Discovering value) discovering,
+    required TResult Function(_Discovered value) discovered,
+    required TResult Function(_Saved value) saved,
+    required TResult Function(_Failure value) failure,
+  }) {
+    return discovering(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(_Initial value)? initial,
+    TResult? Function(_Loading value)? loading,
+    TResult? Function(_Loaded value)? loaded,
+    TResult? Function(_Testing value)? testing,
+    TResult? Function(_TestSuccess value)? testSuccess,
+    TResult? Function(_Discovering value)? discovering,
+    TResult? Function(_Discovered value)? discovered,
+    TResult? Function(_Saved value)? saved,
+    TResult? Function(_Failure value)? failure,
+  }) {
+    return discovering?.call(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(_Initial value)? initial,
+    TResult Function(_Loading value)? loading,
+    TResult Function(_Loaded value)? loaded,
+    TResult Function(_Testing value)? testing,
+    TResult Function(_TestSuccess value)? testSuccess,
+    TResult Function(_Discovering value)? discovering,
+    TResult Function(_Discovered value)? discovered,
+    TResult Function(_Saved value)? saved,
+    TResult Function(_Failure value)? failure,
+    required TResult orElse(),
+  }) {
+    if (discovering != null) {
+      return discovering(this);
+    }
+    return orElse();
+  }
+}
+
+abstract class _Discovering implements RoverConnectionState {
+  const factory _Discovering() = _$DiscoveringImpl;
+}
+
+/// @nodoc
+abstract class _$$DiscoveredImplCopyWith<$Res> {
+  factory _$$DiscoveredImplCopyWith(
+    _$DiscoveredImpl value,
+    $Res Function(_$DiscoveredImpl) then,
+  ) = __$$DiscoveredImplCopyWithImpl<$Res>;
+  @useResult
+  $Res call({String ipAddress});
+}
+
+/// @nodoc
+class __$$DiscoveredImplCopyWithImpl<$Res>
+    extends _$RoverConnectionStateCopyWithImpl<$Res, _$DiscoveredImpl>
+    implements _$$DiscoveredImplCopyWith<$Res> {
+  __$$DiscoveredImplCopyWithImpl(
+    _$DiscoveredImpl _value,
+    $Res Function(_$DiscoveredImpl) _then,
+  ) : super(_value, _then);
+
+  /// Create a copy of RoverConnectionState
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({Object? ipAddress = null}) {
+    return _then(
+      _$DiscoveredImpl(
+        null == ipAddress
+            ? _value.ipAddress
+            : ipAddress // ignore: cast_nullable_to_non_nullable
+                  as String,
+      ),
+    );
+  }
+}
+
+/// @nodoc
+
+class _$DiscoveredImpl implements _Discovered {
+  const _$DiscoveredImpl(this.ipAddress);
+
+  @override
+  final String ipAddress;
+
+  @override
+  String toString() {
+    return 'RoverConnectionState.discovered(ipAddress: $ipAddress)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$DiscoveredImpl &&
+            (identical(other.ipAddress, ipAddress) ||
+                other.ipAddress == ipAddress));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, ipAddress);
+
+  /// Create a copy of RoverConnectionState
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$DiscoveredImplCopyWith<_$DiscoveredImpl> get copyWith =>
+      __$$DiscoveredImplCopyWithImpl<_$DiscoveredImpl>(this, _$identity);
+
+  @override
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function() initial,
+    required TResult Function() loading,
+    required TResult Function(ConnectionEntity connection) loaded,
+    required TResult Function() testing,
+    required TResult Function() testSuccess,
+    required TResult Function() discovering,
+    required TResult Function(String ipAddress) discovered,
+    required TResult Function(ConnectionEntity connection) saved,
+    required TResult Function(String message) failure,
+  }) {
+    return discovered(ipAddress);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function()? initial,
+    TResult? Function()? loading,
+    TResult? Function(ConnectionEntity connection)? loaded,
+    TResult? Function()? testing,
+    TResult? Function()? testSuccess,
+    TResult? Function()? discovering,
+    TResult? Function(String ipAddress)? discovered,
+    TResult? Function(ConnectionEntity connection)? saved,
+    TResult? Function(String message)? failure,
+  }) {
+    return discovered?.call(ipAddress);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function()? initial,
+    TResult Function()? loading,
+    TResult Function(ConnectionEntity connection)? loaded,
+    TResult Function()? testing,
+    TResult Function()? testSuccess,
+    TResult Function()? discovering,
+    TResult Function(String ipAddress)? discovered,
+    TResult Function(ConnectionEntity connection)? saved,
+    TResult Function(String message)? failure,
+    required TResult orElse(),
+  }) {
+    if (discovered != null) {
+      return discovered(ipAddress);
+    }
+    return orElse();
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(_Initial value) initial,
+    required TResult Function(_Loading value) loading,
+    required TResult Function(_Loaded value) loaded,
+    required TResult Function(_Testing value) testing,
+    required TResult Function(_TestSuccess value) testSuccess,
+    required TResult Function(_Discovering value) discovering,
+    required TResult Function(_Discovered value) discovered,
+    required TResult Function(_Saved value) saved,
+    required TResult Function(_Failure value) failure,
+  }) {
+    return discovered(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(_Initial value)? initial,
+    TResult? Function(_Loading value)? loading,
+    TResult? Function(_Loaded value)? loaded,
+    TResult? Function(_Testing value)? testing,
+    TResult? Function(_TestSuccess value)? testSuccess,
+    TResult? Function(_Discovering value)? discovering,
+    TResult? Function(_Discovered value)? discovered,
+    TResult? Function(_Saved value)? saved,
+    TResult? Function(_Failure value)? failure,
+  }) {
+    return discovered?.call(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(_Initial value)? initial,
+    TResult Function(_Loading value)? loading,
+    TResult Function(_Loaded value)? loaded,
+    TResult Function(_Testing value)? testing,
+    TResult Function(_TestSuccess value)? testSuccess,
+    TResult Function(_Discovering value)? discovering,
+    TResult Function(_Discovered value)? discovered,
+    TResult Function(_Saved value)? saved,
+    TResult Function(_Failure value)? failure,
+    required TResult orElse(),
+  }) {
+    if (discovered != null) {
+      return discovered(this);
+    }
+    return orElse();
+  }
+}
+
+abstract class _Discovered implements RoverConnectionState {
+  const factory _Discovered(final String ipAddress) = _$DiscoveredImpl;
+
+  String get ipAddress;
+
+  /// Create a copy of RoverConnectionState
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  _$$DiscoveredImplCopyWith<_$DiscoveredImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
@@ -927,6 +1333,8 @@ class _$SavedImpl implements _Saved {
     required TResult Function(ConnectionEntity connection) loaded,
     required TResult Function() testing,
     required TResult Function() testSuccess,
+    required TResult Function() discovering,
+    required TResult Function(String ipAddress) discovered,
     required TResult Function(ConnectionEntity connection) saved,
     required TResult Function(String message) failure,
   }) {
@@ -941,6 +1349,8 @@ class _$SavedImpl implements _Saved {
     TResult? Function(ConnectionEntity connection)? loaded,
     TResult? Function()? testing,
     TResult? Function()? testSuccess,
+    TResult? Function()? discovering,
+    TResult? Function(String ipAddress)? discovered,
     TResult? Function(ConnectionEntity connection)? saved,
     TResult? Function(String message)? failure,
   }) {
@@ -955,6 +1365,8 @@ class _$SavedImpl implements _Saved {
     TResult Function(ConnectionEntity connection)? loaded,
     TResult Function()? testing,
     TResult Function()? testSuccess,
+    TResult Function()? discovering,
+    TResult Function(String ipAddress)? discovered,
     TResult Function(ConnectionEntity connection)? saved,
     TResult Function(String message)? failure,
     required TResult orElse(),
@@ -973,6 +1385,8 @@ class _$SavedImpl implements _Saved {
     required TResult Function(_Loaded value) loaded,
     required TResult Function(_Testing value) testing,
     required TResult Function(_TestSuccess value) testSuccess,
+    required TResult Function(_Discovering value) discovering,
+    required TResult Function(_Discovered value) discovered,
     required TResult Function(_Saved value) saved,
     required TResult Function(_Failure value) failure,
   }) {
@@ -987,6 +1401,8 @@ class _$SavedImpl implements _Saved {
     TResult? Function(_Loaded value)? loaded,
     TResult? Function(_Testing value)? testing,
     TResult? Function(_TestSuccess value)? testSuccess,
+    TResult? Function(_Discovering value)? discovering,
+    TResult? Function(_Discovered value)? discovered,
     TResult? Function(_Saved value)? saved,
     TResult? Function(_Failure value)? failure,
   }) {
@@ -1001,6 +1417,8 @@ class _$SavedImpl implements _Saved {
     TResult Function(_Loaded value)? loaded,
     TResult Function(_Testing value)? testing,
     TResult Function(_TestSuccess value)? testSuccess,
+    TResult Function(_Discovering value)? discovering,
+    TResult Function(_Discovered value)? discovered,
     TResult Function(_Saved value)? saved,
     TResult Function(_Failure value)? failure,
     required TResult orElse(),
@@ -1099,6 +1517,8 @@ class _$FailureImpl implements _Failure {
     required TResult Function(ConnectionEntity connection) loaded,
     required TResult Function() testing,
     required TResult Function() testSuccess,
+    required TResult Function() discovering,
+    required TResult Function(String ipAddress) discovered,
     required TResult Function(ConnectionEntity connection) saved,
     required TResult Function(String message) failure,
   }) {
@@ -1113,6 +1533,8 @@ class _$FailureImpl implements _Failure {
     TResult? Function(ConnectionEntity connection)? loaded,
     TResult? Function()? testing,
     TResult? Function()? testSuccess,
+    TResult? Function()? discovering,
+    TResult? Function(String ipAddress)? discovered,
     TResult? Function(ConnectionEntity connection)? saved,
     TResult? Function(String message)? failure,
   }) {
@@ -1127,6 +1549,8 @@ class _$FailureImpl implements _Failure {
     TResult Function(ConnectionEntity connection)? loaded,
     TResult Function()? testing,
     TResult Function()? testSuccess,
+    TResult Function()? discovering,
+    TResult Function(String ipAddress)? discovered,
     TResult Function(ConnectionEntity connection)? saved,
     TResult Function(String message)? failure,
     required TResult orElse(),
@@ -1145,6 +1569,8 @@ class _$FailureImpl implements _Failure {
     required TResult Function(_Loaded value) loaded,
     required TResult Function(_Testing value) testing,
     required TResult Function(_TestSuccess value) testSuccess,
+    required TResult Function(_Discovering value) discovering,
+    required TResult Function(_Discovered value) discovered,
     required TResult Function(_Saved value) saved,
     required TResult Function(_Failure value) failure,
   }) {
@@ -1159,6 +1585,8 @@ class _$FailureImpl implements _Failure {
     TResult? Function(_Loaded value)? loaded,
     TResult? Function(_Testing value)? testing,
     TResult? Function(_TestSuccess value)? testSuccess,
+    TResult? Function(_Discovering value)? discovering,
+    TResult? Function(_Discovered value)? discovered,
     TResult? Function(_Saved value)? saved,
     TResult? Function(_Failure value)? failure,
   }) {
@@ -1173,6 +1601,8 @@ class _$FailureImpl implements _Failure {
     TResult Function(_Loaded value)? loaded,
     TResult Function(_Testing value)? testing,
     TResult Function(_TestSuccess value)? testSuccess,
+    TResult Function(_Discovering value)? discovering,
+    TResult Function(_Discovered value)? discovered,
     TResult Function(_Saved value)? saved,
     TResult Function(_Failure value)? failure,
     required TResult orElse(),

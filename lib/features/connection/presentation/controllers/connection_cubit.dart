@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 
 import '../../domain/entities/connection_entity.dart';
+import '../../domain/usecases/discover_rover_ip_usecase.dart';
 import '../../domain/usecases/load_saved_connection_usecase.dart';
 import '../../domain/usecases/save_connection_usecase.dart';
 import '../../domain/usecases/test_connection_usecase.dart';
@@ -10,14 +11,34 @@ import 'connection_state.dart';
 @injectable
 class ConnectionCubit extends Cubit<RoverConnectionState> {
   ConnectionCubit(
+    this._discoverRoverIpUseCase,
     this._loadSavedConnectionUseCase,
     this._saveConnectionUseCase,
     this._testConnectionUseCase,
   ) : super(const RoverConnectionState.initial());
 
+  final DiscoverRoverIpUseCase _discoverRoverIpUseCase;
   final LoadSavedConnectionUseCase _loadSavedConnectionUseCase;
   final SaveConnectionUseCase _saveConnectionUseCase;
   final TestConnectionUseCase _testConnectionUseCase;
+
+  Future<void> discoverRoverIp() async {
+    emit(const RoverConnectionState.discovering());
+    final (ipAddress, failure) = await _discoverRoverIpUseCase.execute();
+    if (failure != null) {
+      emit(RoverConnectionState.failure(failure.message));
+      return;
+    }
+    if (ipAddress == null) {
+      emit(
+        const RoverConnectionState.failure(
+          'Auto-detect could not find rover IP.',
+        ),
+      );
+      return;
+    }
+    emit(RoverConnectionState.discovered(ipAddress));
+  }
 
   Future<void> loadSavedAddress() async {
     emit(const RoverConnectionState.loading());

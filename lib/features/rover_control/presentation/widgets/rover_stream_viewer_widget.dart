@@ -9,11 +9,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../app/locator.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/dio_client.dart';
-import '../../../ml_settings/data/services/object_detection_service.dart';
-import '../../../ml_settings/domain/enums/object_detection_mode.dart';
+import '../../../ml_object_detection/data/services/object_detection_service.dart';
+import '../../../ml_object_detection/domain/enums/object_detection_mode.dart';
 import '../controllers/rover_control_cubit.dart';
 
-export '../../../ml_settings/domain/enums/object_detection_mode.dart';
+export '../../../ml_object_detection/domain/enums/object_detection_mode.dart';
 
 enum StreamOrientationMode { normal, rotate180, rotate180Mirrored }
 

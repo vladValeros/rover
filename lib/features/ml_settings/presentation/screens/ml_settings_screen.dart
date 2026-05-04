@@ -3,30 +3,16 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../controllers/ml_settings_cubit.dart';
 import '../controllers/ml_settings_state.dart';
-import '../widgets/object_detection_settings_card.dart';
+import '../registry/ml_feature_registry.dart';
 
 /// ML & AI Settings screen.
 ///
 /// Lists every registered ML feature as an isolated card.
 /// Each card manages its own state — features are completely independent.
 ///
-/// ── Adding a new ML feature ──────────────────────────────────────────────
-///   1. Add entity + enum in `ml_settings/domain/`.
-///   2. Add datasource key + load/save in [MlSettingsLocalDatasource].
-///   3. Add `updateXxx()` on [MlSettingsCubit].
-///   4. Create `XxxSettingsCard` in `ml_settings/presentation/widgets/`.
-///   5. Add it to [_featureCards] below — done.
-/// ────────────────────────────────────────────────────────────────────────
+/// Add new ML features by registering one entry in [mlFeatureRegistry].
 class MlSettingsScreen extends StatelessWidget {
   const MlSettingsScreen({super.key});
-
-  /// Register ML feature cards here.
-  static const List<Widget> _featureCards = [
-    ObjectDetectionSettingsCard(),
-    // MotionDetectionSettingsCard(),
-    // FaceDetectionSettingsCard(),
-    // LineFollowingSettingsCard(),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -46,9 +32,11 @@ class MlSettingsScreen extends StatelessWidget {
               children: [
                 _SectionHeader(
                   title: 'Machine Learning Features',
-                  subtitle: '${_featureCards.length} feature(s) available',
+                  subtitle: '${mlFeatureRegistry.length} feature(s) available',
                 ),
-                ..._featureCards,
+                ...mlFeatureRegistry.map(
+                  (feature) => feature.buildSettingsCard(),
+                ),
               ],
             ),
           ),
@@ -71,10 +59,9 @@ class _MlStatusBanner extends StatelessWidget {
         }
 
         // Count how many features are currently active.
-        final activeCount = [
-          settings.objectDetection.mode.name != 'off',
-          // settings.motionDetection.enabled,  // add more here
-        ].where((v) => v).length;
+        final activeCount = mlFeatureRegistry
+            .where((feature) => feature.isActive(settings))
+            .length;
 
         final colorScheme = Theme.of(context).colorScheme;
 

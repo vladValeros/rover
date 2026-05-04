@@ -99,7 +99,8 @@ Core folders:
 - lib/core: constants, networking, theme, shared utilities/errors
 - lib/features/connection: rover address discovery, save/load, test
 - lib/features/rover_control: command dispatch, stream viewer, control UI
-- lib/features/ml_settings: ML settings entities, persistence, UI cards
+- lib/features/ml_settings: ML registry, settings persistence, and settings host UI
+- lib/features/ml_object_detection: object detection ML module (domain/data/presentation)
 - docs: firmware/web reference files
 
 ## 5. Important File Map (Navigation Guide)
@@ -129,8 +130,11 @@ ML settings and runtime-isolated ML:
 - lib/features/ml_settings/presentation/controllers/ml_settings_cubit.dart
 - lib/features/ml_settings/data/datasources/ml_settings_local_datasource.dart
 - lib/features/ml_settings/domain/entities/ml_settings_entity.dart
-- lib/features/ml_settings/domain/enums/object_detection_mode.dart
-- lib/features/ml_settings/data/services/object_detection_service.dart
+- lib/features/ml_settings/presentation/registry/ml_feature_registry.dart
+- lib/features/ml_object_detection/domain/enums/object_detection_mode.dart
+- lib/features/ml_object_detection/domain/entities/object_detection_settings.dart
+- lib/features/ml_object_detection/data/services/object_detection_service.dart
+- lib/features/ml_object_detection/presentation/widgets/object_detection_settings_card.dart
 
 Firmware/web reference:
 - docs/ESP32CAM_Car.ino
@@ -194,29 +198,31 @@ Tradeoffs:
 
 Question: can a teammate add specific ML without touching unrelated app features?
 
-Answer: Mostly yes, and isolation was further strengthened.
+Answer: Yes, with the new registry contract this is now the intended extension model.
 
 What is now isolated:
 1. ML settings state and persistence are isolated in ml_settings feature
-2. Object detection service was moved under ml_settings feature namespace
+2. Object detection is isolated as its own feature module under ml_object_detection
 3. Rover control consumes ML outputs/settings but does not own ML internals
+4. Settings UI discovers ML features via a registration contract in ml_feature_registry
 
 Current integration boundary:
 - rover_stream_viewer_widget is the only intentional integration point that combines stream frame input with ML output overlays
 
 Implication for new ML contributors:
-- They should add/modify ML internals primarily under lib/features/ml_settings
+- They should create a new lib/features/ml_<feature>/ module
+- They should register the new feature once in ml_feature_registry
 - They should only touch rover_control when attaching new overlay outputs or runtime toggles
 
 ## 9. How To Contribute: Machine Learning (Flutter App)
 
 Recommended contribution standard:
-1. Add new ML configuration model in ml_settings/domain/entities
-2. Add mode/enum in ml_settings/domain/enums when needed
-3. Persist settings in ml_settings/data/datasources/ml_settings_local_datasource.dart
-4. Add Cubit update method in ml_settings/presentation/controllers/ml_settings_cubit.dart
-5. Add isolated settings card in ml_settings/presentation/widgets
-6. Add inference service implementation under ml_settings/data/services
+1. Create new feature folder lib/features/ml_<feature>/ with domain/data/presentation
+2. Add feature-specific settings model(s) under that feature module
+3. Extend MlSettingsEntity and MlSettingsLocalDatasource to store the feature settings
+4. Add/update cubit methods for new settings updates
+5. Add feature settings card widget under the new feature module
+6. Register it in ml_feature_registry (single registration entry)
 7. Integrate into stream widget with strict boundary:
 - input: frame bytes
 - output: normalized overlays or events
@@ -224,9 +230,11 @@ Recommended contribution standard:
 
 Rules for isolation:
 1. Do not place new ML services under rover_control feature
-2. Do not mix command networking logic with ML inference logic
-3. Keep feature flags and defaults in MlSettingsEntity
-4. Provide graceful fallback if plugin/model unavailable
+2. Every ML capability must live in its own ml_<feature> folder
+3. Register new ML features through ml_feature_registry only
+4. Do not mix command networking logic with ML inference logic
+5. Keep feature flags and defaults in MlSettingsEntity
+6. Provide graceful fallback if plugin/model unavailable
 
 Performance guidance:
 1. Keep inference interval configurable

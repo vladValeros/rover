@@ -15,6 +15,25 @@ export '../../../ml_settings/domain/enums/object_detection_mode.dart';
 
 enum StreamOrientationMode { normal, rotate180, rotate180Mirrored }
 
+/// Lifecycle state of the MJPEG stream connection.
+enum _StreamStatus {
+  /// First connect or manual refresh — no frame yet.
+  connecting,
+
+  /// Actively receiving frames — normal operation.
+  streaming,
+
+  /// Frames stopped arriving; watchdog detected a freeze.
+  /// Last frame is still shown with an orange banner overlay.
+  frozen,
+
+  /// A reconnect attempt failed; retrying automatically.
+  error,
+
+  /// Too many consecutive failures — rover is likely offline.
+  offline,
+}
+
 class DetectionOverlayBox {
   const DetectionOverlayBox({
     required this.normalizedRect,
@@ -37,6 +56,7 @@ class RoverStreamViewerWidget extends StatefulWidget {
     this.minDetectionArea = 0.002,
     this.showDiagnostics = true,
     this.onMlUnavailable,
+    this.onRoverOffline,
     super.key,
   });
 
@@ -47,7 +67,14 @@ class RoverStreamViewerWidget extends StatefulWidget {
   final int detectionIntervalMs;
   final double minDetectionArea;
   final bool showDiagnostics;
+
+  /// Called when ML is not available in the current runtime.
   final ValueChanged<String>? onMlUnavailable;
+
+  /// Called once when consecutive reconnect failures exceed the offline
+  /// threshold, meaning the rover is considered powered off or unreachable.
+  /// The parent screen should surface navigation options to the user.
+  final VoidCallback? onRoverOffline;
 
   @override
   State<RoverStreamViewerWidget> createState() =>
@@ -60,9 +87,12 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   static const Duration _autoReconnectDelay = Duration(seconds: 1);
   static const Duration _streamConnectTimeout = Duration(seconds: 20);
 
+  /// Declare rover offline after this many consecutive failures.
+  static const int _offlineThreshold = 5;
+
   Uint8List? _currentFrame;
   StreamSubscription<Uint8List>? _streamSubscription;
-  bool _hasError = false;
+  _StreamStatus _streamStatus = _StreamStatus.connecting;
   String? _errorMessage;
   String? _streamEndpoint;
   CancelToken? _cancelToken;
@@ -80,14 +110,16 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   int _skippedInferenceCount = 0;
   int _totalInferenceMs = 0;
   int _reconnectCount = 0;
+  int _consecutiveFailures = 0;
   final ObjectDetectionService _detectionService = ObjectDetectionService();
 
   @override
   void initState() {
     super.initState();
-    _watchdogTimer = Timer.periodic(_watchdogInterval, (_) {
-      _checkForFreeze();
-    });
+    _watchdogTimer = Timer.periodic(
+      _watchdogInterval,
+      (_) => _checkForFreeze(),
+    );
     _startStream();
   }
 
@@ -95,7 +127,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   void didUpdateWidget(covariant RoverStreamViewerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.refreshNonce != oldWidget.refreshNonce) {
-      _restartStream('Manual refresh requested');
+      _resetAndRestart();
     }
     if (widget.detectionMode != oldWidget.detectionMode &&
         widget.detectionMode == ObjectDetectionMode.off) {
@@ -116,22 +148,22 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
     super.dispose();
   }
 
+  // ── Stream lifecycle ─────────────────────────────────────────────────────
+
   Future<void> _startStream() async {
-    if (_isStarting) {
-      return;
-    }
+    if (_isStarting) return;
     _isStarting = true;
 
     _reconnectTimer?.cancel();
     _cancelToken?.cancel();
     await _streamSubscription?.cancel();
 
-    setState(() {
-      _hasError = false;
-      _currentFrame = null;
-      _errorMessage = null;
-      _lastFrameAt = null;
-    });
+    if (mounted && _streamStatus != _StreamStatus.frozen) {
+      setState(() {
+        _errorMessage = null;
+        _lastFrameAt = null;
+      });
+    }
 
     try {
       _cancelToken = CancelToken();
@@ -162,26 +194,18 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         cancelToken: _cancelToken,
       );
 
-      final stream = response.data!.stream;
       final List<int> buffer = [];
-
-      _streamSubscription = stream
-          .map((chunk) => chunk)
-          .listen(
-            (chunk) {
-              buffer.addAll(chunk);
-              _extractFrames(buffer);
-            },
-            onError: (error) {
-              _onStreamFailure(error.toString());
-            },
-            onDone: () {
-              _onStreamFailure('Stream ended unexpectedly. Reconnecting...');
-            },
-            cancelOnError: true,
-          );
+      _streamSubscription = response.data!.stream.listen(
+        (chunk) {
+          buffer.addAll(chunk);
+          _extractFrames(buffer);
+        },
+        onError: (error) => _onStreamFailure(error.toString()),
+        onDone: () => _onStreamFailure('Stream ended unexpectedly.'),
+        cancelOnError: true,
+      );
     } on DioException catch (e) {
-      _onStreamFailure(e.message ?? e.type.name);
+      _onStreamFailure(_friendlyDioError(e));
     } catch (e) {
       _onStreamFailure(e.toString());
     } finally {
@@ -206,8 +230,10 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
           setState(() {
             _currentFrame = frame;
             _lastFrameAt = DateTime.now();
-            if (_hasError) {
-              _hasError = false;
+            // Successful frame: reset failure tracking.
+            if (_streamStatus != _StreamStatus.streaming) {
+              _streamStatus = _StreamStatus.streaming;
+              _consecutiveFailures = 0;
               _errorMessage = null;
             }
           });
@@ -217,6 +243,83 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
       }
     }
   }
+
+  void _onStreamFailure(String message) {
+    _logError('stream', message);
+    if (!mounted) return;
+
+    _consecutiveFailures++;
+    _reconnectCount++;
+
+    final isOffline = _consecutiveFailures >= _offlineThreshold;
+    setState(() {
+      _errorMessage = message;
+      _streamStatus = isOffline ? _StreamStatus.offline : _StreamStatus.error;
+    });
+
+    if (isOffline) {
+      widget.onRoverOffline?.call();
+    } else {
+      _scheduleReconnect();
+    }
+  }
+
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    // Progressive back-off capped at 5 s.
+    final delay = Duration(
+      milliseconds:
+          _autoReconnectDelay.inMilliseconds *
+          (1 + (_consecutiveFailures - 1).clamp(0, 4)),
+    );
+    _reconnectTimer = Timer(delay, () {
+      if (mounted) _startStream();
+    });
+  }
+
+  void _checkForFreeze() {
+    if (!mounted ||
+        _streamStatus == _StreamStatus.offline ||
+        _streamStatus == _StreamStatus.frozen ||
+        _currentFrame == null ||
+        _isStarting) {
+      return;
+    }
+    final lastFrameAt = _lastFrameAt;
+    if (lastFrameAt == null) return;
+
+    if (DateTime.now().difference(lastFrameAt) > _freezeThreshold) {
+      if (mounted) {
+        setState(() {
+          _streamStatus = _StreamStatus.frozen;
+          _errorMessage = 'Stream frozen — reconnecting...';
+        });
+      }
+      _startStream();
+    }
+  }
+
+  void _resetAndRestart() {
+    if (!mounted) return;
+    setState(() {
+      _consecutiveFailures = 0;
+      _streamStatus = _StreamStatus.connecting;
+      _errorMessage = null;
+      _currentFrame = null;
+    });
+    _startStream();
+  }
+
+  void _manualRetry() {
+    setState(() {
+      _consecutiveFailures = 0;
+      _streamStatus = _StreamStatus.connecting;
+      _errorMessage = null;
+    });
+    _startStream();
+  }
+
+  // ── ML helpers ───────────────────────────────────────────────────────────
 
   Future<void> _runDetectionIfNeeded(Uint8List frame) async {
     if (widget.detectionMode == ObjectDetectionMode.off ||
@@ -235,8 +338,8 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
 
     _isDetecting = true;
     _lastInferenceAt = now;
-
     final watch = Stopwatch()..start();
+
     try {
       final rawDetections = await _detectionService.detect(
         frame,
@@ -245,30 +348,22 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
 
       if (_detectionService.isUnavailable) {
         const message =
-            'ML plugin not available in current runtime. '
-            'Stop app and run full rebuild (flutter clean; flutter run).';
+            'ML plugin not available. Run flutter clean && flutter run.';
         _disableMlForSession('detector', message);
         return;
       }
 
       final mapped = <DetectionOverlayBox>[];
-      for (final detection in rawDetections) {
-        final label = _normalizeLabel(detection.label);
-        if (!_shouldIncludeLabel(label)) {
-          continue;
-        }
-
-        final area =
-            detection.normalizedRect.width * detection.normalizedRect.height;
-        if (area < widget.minDetectionArea) {
-          continue;
-        }
-
+      for (final d in rawDetections) {
+        final label = _normalizeLabel(d.label);
+        if (!_shouldIncludeLabel(label)) continue;
+        final area = d.normalizedRect.width * d.normalizedRect.height;
+        if (area < widget.minDetectionArea) continue;
         mapped.add(
           DetectionOverlayBox(
-            normalizedRect: detection.normalizedRect,
+            normalizedRect: d.normalizedRect,
             label: label,
-            confidence: detection.confidence,
+            confidence: d.confidence,
           ),
         );
       }
@@ -281,11 +376,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
       }
     } catch (e) {
       _logError('detector', e.toString());
-      if (mounted) {
-        setState(() {
-          _detectionError = e.toString();
-        });
-      }
+      if (mounted) setState(() => _detectionError = e.toString());
     } finally {
       watch.stop();
       if (mounted) {
@@ -318,59 +409,6 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
     }
   }
 
-  void _checkForFreeze() {
-    if (!mounted || _hasError || _currentFrame == null || _isStarting) {
-      return;
-    }
-
-    final lastFrameAt = _lastFrameAt;
-    if (lastFrameAt == null) {
-      return;
-    }
-
-    final elapsed = DateTime.now().difference(lastFrameAt);
-    if (elapsed > _freezeThreshold) {
-      _restartStream('Stream frozen. Reconnecting...');
-    }
-  }
-
-  void _onStreamFailure(String message) {
-    _logError('stream', message);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _hasError = true;
-      _errorMessage = message;
-    });
-    _scheduleReconnect();
-  }
-
-  void _scheduleReconnect() {
-    _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(_autoReconnectDelay, () {
-      if (mounted) {
-        _reconnectCount++;
-        _startStream();
-      }
-    });
-  }
-
-  void _restartStream(String reason) {
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _hasError = true;
-      _errorMessage = reason;
-    });
-    _startStream();
-  }
-
-  void _logError(String source, String message) {
-    debugPrint('[RoverStream][$source][ERROR] $message');
-  }
-
   void _disableMlForSession(String source, String message) {
     _logError(source, message);
     _detectionService.dispose();
@@ -378,71 +416,62 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
     if (mounted) {
       setState(() {
         _detections = const [];
-        _detectionError = '$message\nML is disabled until app restart.';
+        _detectionError = '$message\nML disabled until restart.';
       });
     }
     widget.onMlUnavailable?.call(message);
   }
 
+  void _logError(String source, String message) =>
+      debugPrint('[RoverStream][$source][ERROR] $message');
+
+  String _friendlyDioError(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return 'Connection timed out. Is the rover powered on?';
+      case DioExceptionType.connectionError:
+        return 'Cannot reach rover. Check Wi-Fi and rover power.';
+      default:
+        return e.message ?? e.type.name;
+    }
+  }
+
+  // ── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    if (_hasError) {
+    // Offline — rover is declared unreachable.
+    if (_streamStatus == _StreamStatus.offline) {
       return AspectRatio(
         aspectRatio: 4 / 3,
-        child: Container(
-          color: Theme.of(context).colorScheme.surface,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.videocam_off,
-                size: 48,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Stream unavailable',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              if (_streamEndpoint != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  _streamEndpoint!,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 6),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    _errorMessage!,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 8),
-              TextButton(onPressed: _startStream, child: const Text('Retry')),
-            ],
-          ),
+        child: _OfflinePanel(endpoint: _streamEndpoint, onRetry: _manualRetry),
+      );
+    }
+
+    // Auto-retrying after a failure.
+    if (_streamStatus == _StreamStatus.error) {
+      return AspectRatio(
+        aspectRatio: 4 / 3,
+        child: _RetryingPanel(
+          errorMessage: _errorMessage,
+          attempt: _consecutiveFailures,
+          maxAttempts: _offlineThreshold,
+          onRetryNow: _manualRetry,
         ),
       );
     }
 
+    // Initial connect — no frame received yet.
     if (_currentFrame == null) {
       return AspectRatio(
         aspectRatio: 4 / 3,
-        child: Container(
-          color: Theme.of(context).colorScheme.surface,
-          child: const Center(child: CircularProgressIndicator()),
-        ),
+        child: _ConnectingPanel(endpoint: _streamEndpoint),
       );
     }
 
+    // ── Active frame rendering ───────────────────────────────────────────
     final image = Image.memory(
       _currentFrame!,
       gaplessPlayback: true,
@@ -455,8 +484,8 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
           fit: StackFit.expand,
           children: [
             image,
-            ..._detections.map((detection) {
-              final rect = detection.normalizedRect;
+            ..._detections.map((det) {
+              final rect = det.normalizedRect;
               return Positioned(
                 left: rect.left * constraints.maxWidth,
                 top: rect.top * constraints.maxHeight,
@@ -471,18 +500,20 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   alignment: Alignment.topLeft,
-                  child: Container(
+                  child: ColoredBox(
                     color: Colors.black54,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 2,
-                    ),
-                    child: _buildReadableOverlayText(
-                      child: Text(
-                        '${detection.label} ${(detection.confidence * 100).toStringAsFixed(0)}%',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      child: _buildReadableOverlayText(
+                        child: Text(
+                          '${det.label} ${(det.confidence * 100).toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                          ),
                         ),
                       ),
                     ),
@@ -519,6 +550,40 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         fit: StackFit.expand,
         children: [
           orientedImage,
+
+          // Frozen banner over the last good frame.
+          if (_streamStatus == _StreamStatus.frozen)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                color: Colors.orange.withAlpha(220),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 7,
+                  horizontal: 12,
+                ),
+                child: const Row(
+                  children: [
+                    SizedBox(
+                      height: 13,
+                      width: 13,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Stream frozen — reconnecting...',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // ML diagnostics HUD.
           if (widget.detectionMode != ObjectDetectionMode.off &&
               widget.showDiagnostics)
             Positioned(
@@ -531,11 +596,18 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  'ML ${_lastInferenceMs}ms avg:${_averageInferenceMs().toStringAsFixed(0)} | obj:${_detections.length} P:${_processedInferenceCount} S:${_skippedInferenceCount} R:${_reconnectCount}',
+                  'ML ${_lastInferenceMs}ms '
+                  'avg:${_averageInferenceMs().toStringAsFixed(0)} | '
+                  'obj:${_detections.length} '
+                  'P:$_processedInferenceCount '
+                  'S:$_skippedInferenceCount '
+                  'R:$_reconnectCount',
                   style: const TextStyle(color: Colors.white, fontSize: 11),
                 ),
               ),
             ),
+
+          // ML error toast.
           if (_detectionError != null)
             Positioned(
               left: 8,
@@ -578,9 +650,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
 
   String _normalizeLabel(String raw) {
     final lower = raw.toLowerCase();
-    if (lower.contains('person') || lower.contains('human')) {
-      return 'Person';
-    }
+    if (lower.contains('person') || lower.contains('human')) return 'Person';
     if (lower.contains('car') ||
         lower.contains('vehicle') ||
         lower.contains('truck') ||
@@ -589,16 +659,201 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         lower.contains('bike')) {
       return 'Vehicle';
     }
-    if (raw.isEmpty) {
-      return 'Object';
-    }
-    return raw;
+    return raw.isEmpty ? 'Object' : raw;
   }
 
   double _averageInferenceMs() {
-    if (_processedInferenceCount == 0) {
-      return 0;
-    }
+    if (_processedInferenceCount == 0) return 0;
     return _totalInferenceMs / _processedInferenceCount;
+  }
+}
+
+// ── Isolated UI panels ────────────────────────────────────────────────────────
+
+/// Shown while the initial connection is being established.
+class _ConnectingPanel extends StatelessWidget {
+  const _ConnectingPanel({this.endpoint});
+  final String? endpoint;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      color: cs.surface,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(
+            'Connecting to rover...',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          if (endpoint != null) ...[
+            const SizedBox(height: 6),
+            Text(endpoint!, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown when a reconnect attempt failed but the offline threshold has
+/// not yet been reached.  Auto-retrying with progress indicator.
+class _RetryingPanel extends StatelessWidget {
+  const _RetryingPanel({
+    required this.errorMessage,
+    required this.attempt,
+    required this.maxAttempts,
+    required this.onRetryNow,
+  });
+
+  final String? errorMessage;
+  final int attempt;
+  final int maxAttempts;
+  final VoidCallback onRetryNow;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return ColoredBox(
+      color: cs.surface,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - 40,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.signal_wifi_statusbar_connected_no_internet_4,
+                    size: 48,
+                    color: cs.error,
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Connection interrupted', style: tt.titleMedium),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Retrying… ($attempt / $maxAttempts)',
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: tt.bodySmall?.copyWith(color: cs.error),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: onRetryNow,
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Retry Now'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Shown when the rover is declared offline.
+/// Gives the user unambiguous options: retry or go back to the menu.
+/// The "Go Back" action is wired via [onRoverOffline] from the parent screen.
+class _OfflinePanel extends StatelessWidget {
+  const _OfflinePanel({this.endpoint, required this.onRetry});
+
+  final String? endpoint;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return ColoredBox(
+      color: cs.surface,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - 48,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.power_off_rounded,
+                    size: 60,
+                    color: cs.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Rover is offline',
+                    style: tt.titleLarge?.copyWith(color: cs.onSurface),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'No response received after multiple attempts.\n'
+                    'Make sure the rover is powered on and connected to this network.',
+                    textAlign: TextAlign.center,
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                  if (endpoint != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        endpoint!,
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 28),
+                  FilledButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry Connection'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 }

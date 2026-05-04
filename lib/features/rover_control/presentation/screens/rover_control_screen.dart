@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/locator.dart';
 import '../../../connection/connection_routes.dart';
-import '../../../ml_settings/domain/enums/object_detection_mode.dart';
 import '../../../ml_settings/ml_settings_routes.dart';
 import '../../../ml_settings/presentation/controllers/ml_settings_cubit.dart';
 import '../../../ml_settings/presentation/controllers/ml_settings_state.dart';
@@ -24,6 +23,7 @@ class RoverControlScreen extends StatefulWidget {
 class _RoverControlScreenState extends State<RoverControlScreen> {
   StreamOrientationMode _orientationMode = StreamOrientationMode.normal;
   int _streamRefreshNonce = 0;
+  bool _offlineSheetShown = false;
 
   @override
   Widget build(BuildContext context) {
@@ -33,9 +33,16 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
         listener: (context, state) {
           state.whenOrNull(
             failure: (message) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(message)));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(message),
+                  action: SnackBarAction(
+                    label: 'Dismiss',
+                    onPressed: () =>
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+                  ),
+                ),
+              );
             },
           );
         },
@@ -105,6 +112,7 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
                           ).showSnackBar(SnackBar(content: Text(message)));
                         },
                         refreshNonce: _streamRefreshNonce,
+                        onRoverOffline: () => _showOfflineSheet(context),
                       ),
                       const SizedBox(height: 10),
                       // ── Camera orientation chips ─────────────────────────
@@ -156,6 +164,86 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showOfflineSheet(BuildContext context) {
+    if (_offlineSheetShown) return;
+    _offlineSheetShown = true;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (sheetCtx) => _RoverOfflineSheet(
+        onRetry: () {
+          Navigator.of(sheetCtx).pop();
+          setState(() => _streamRefreshNonce++);
+        },
+        onGoBack: () {
+          Navigator.of(sheetCtx).pop();
+          context.go(ConnectionRoutes.path);
+        },
+      ),
+    ).whenComplete(() {
+      if (mounted) _offlineSheetShown = false;
+    });
+  }
+}
+
+class _RoverOfflineSheet extends StatelessWidget {
+  const _RoverOfflineSheet({required this.onRetry, required this.onGoBack});
+
+  final VoidCallback onRetry;
+  final VoidCallback onGoBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: cs.outlineVariant,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Icon(Icons.power_off_rounded, size: 48, color: cs.onSurfaceVariant),
+          const SizedBox(height: 12),
+          Text('Rover is offline', style: tt.titleLarge),
+          const SizedBox(height: 8),
+          Text(
+            'The rover stopped responding. It may have been powered off or lost network connection.',
+            textAlign: TextAlign.center,
+            style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry Connection'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: onGoBack,
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Back to Menu'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -27,4 +27,8 @@ class ConnectionRepositoryImpl implements ConnectionRepository {
   @override
   Future<AppFailure?> testConnection(String ipAddress) =>
       _remoteDatasource.pingRover(ipAddress);
+
+  @override
+  Future<(String?, AppFailure?)> discoverRoverIp() =>
+      _remoteDatasource.discoverRoverIp();
 }

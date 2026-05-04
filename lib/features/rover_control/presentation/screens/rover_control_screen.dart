@@ -19,6 +19,7 @@ class RoverControlScreen extends StatefulWidget {
 
 class _RoverControlScreenState extends State<RoverControlScreen> {
   StreamOrientationMode _orientationMode = StreamOrientationMode.normal;
+  ObjectDetectionMode _detectionMode = ObjectDetectionMode.off;
   int _streamRefreshNonce = 0;
 
   @override
@@ -70,6 +71,7 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
                 children: [
                   RoverStreamViewerWidget(
                     orientationMode: _orientationMode,
+                    detectionMode: _detectionMode,
                     refreshNonce: _streamRefreshNonce,
                   ),
                   const SizedBox(height: 10),
@@ -109,6 +111,54 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
                           setState(
                             () => _orientationMode =
                                 StreamOrientationMode.rotate180Mirrored,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('ML Off'),
+                        selected: _detectionMode == ObjectDetectionMode.off,
+                        onSelected: (_) {
+                          setState(
+                            () => _detectionMode = ObjectDetectionMode.off,
+                          );
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('General'),
+                        selected: _detectionMode == ObjectDetectionMode.general,
+                        onSelected: (_) {
+                          setState(
+                            () => _detectionMode = ObjectDetectionMode.general,
+                          );
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('Person'),
+                        selected:
+                            _detectionMode == ObjectDetectionMode.personOnly,
+                        onSelected: (_) {
+                          setState(
+                            () =>
+                                _detectionMode = ObjectDetectionMode.personOnly,
+                          );
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('Vehicle'),
+                        selected:
+                            _detectionMode == ObjectDetectionMode.vehicleOnly,
+                        onSelected: (_) {
+                          setState(
+                            () => _detectionMode =
+                                ObjectDetectionMode.vehicleOnly,
                           );
                         },
                       ),

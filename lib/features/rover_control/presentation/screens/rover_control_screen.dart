@@ -1,10 +1,13 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../app/locator.dart';
 import '../../../connection/connection_routes.dart';
+import '../../../ml_settings/domain/enums/object_detection_mode.dart';
+import '../../../ml_settings/ml_settings_routes.dart';
+import '../../../ml_settings/presentation/controllers/ml_settings_cubit.dart';
+import '../../../ml_settings/presentation/controllers/ml_settings_state.dart';
 import '../controllers/rover_control_cubit.dart';
 import '../controllers/rover_control_state.dart';
 import '../widgets/directional_pad_widget.dart';
@@ -19,54 +22,8 @@ class RoverControlScreen extends StatefulWidget {
 }
 
 class _RoverControlScreenState extends State<RoverControlScreen> {
-  static const String _modeKey = 'ml_mode';
-  static const String _thresholdKey = 'ml_threshold';
-  static const String _intervalKey = 'ml_interval_ms';
-  static const String _showDiagnosticsKey = 'ml_show_diagnostics';
-
   StreamOrientationMode _orientationMode = StreamOrientationMode.normal;
-  ObjectDetectionMode _detectionMode = ObjectDetectionMode.off;
   int _streamRefreshNonce = 0;
-  double _confidenceThreshold = 0.45;
-  int _detectionIntervalMs = 800;
-  bool _showDiagnostics = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMlPreferences();
-  }
-
-  Future<void> _loadMlPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _detectionMode = ObjectDetectionMode.values[prefs.getInt(_modeKey) ?? 0];
-      _confidenceThreshold = prefs.getDouble(_thresholdKey) ?? 0.45;
-      _detectionIntervalMs = prefs.getInt(_intervalKey) ?? 800;
-      _showDiagnostics = prefs.getBool(_showDiagnosticsKey) ?? true;
-    });
-  }
-
-  Future<void> _saveMlPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_modeKey, _detectionMode.index);
-    await prefs.setDouble(_thresholdKey, _confidenceThreshold);
-    await prefs.setInt(_intervalKey, _detectionIntervalMs);
-    await prefs.setBool(_showDiagnosticsKey, _showDiagnostics);
-  }
-
-  Future<void> _setDetectionMode(ObjectDetectionMode mode) async {
-    if (_detectionMode == mode) {
-      return;
-    }
-    setState(() {
-      _detectionMode = mode;
-    });
-    await _saveMlPreferences();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +45,11 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
             backgroundColor: Colors.transparent,
             elevation: 0,
             actions: [
+              IconButton(
+                icon: const Icon(Icons.settings),
+                tooltip: 'ML / AI Settings',
+                onPressed: () => context.push(MlSettingsRoutes.path),
+              ),
               IconButton(
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Refresh Connection',
@@ -113,173 +75,83 @@ class _RoverControlScreenState extends State<RoverControlScreen> {
           body: SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  RoverStreamViewerWidget(
-                    orientationMode: _orientationMode,
-                    detectionMode: _detectionMode,
-                    detectionConfidenceThreshold: _confidenceThreshold,
-                    detectionIntervalMs: _detectionIntervalMs,
-                    showDiagnostics: _showDiagnostics,
-                    onMlUnavailable: (message) {
-                      _setDetectionMode(ObjectDetectionMode.off);
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text(message)));
-                    },
-                    refreshNonce: _streamRefreshNonce,
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.center,
+              child: BlocBuilder<MlSettingsCubit, MlSettingsState>(
+                builder: (context, mlState) {
+                  final mlSettings = mlState.whenOrNull(loaded: (s) => s);
+                  final od = mlSettings?.objectDetection;
+                  return Column(
                     children: [
-                      ChoiceChip(
-                        label: const Text('Normal'),
-                        selected:
-                            _orientationMode == StreamOrientationMode.normal,
-                        onSelected: (_) {
-                          setState(
-                            () =>
-                                _orientationMode = StreamOrientationMode.normal,
+                      RoverStreamViewerWidget(
+                        orientationMode: _orientationMode,
+                        detectionMode: od?.mode ?? ObjectDetectionMode.off,
+                        detectionConfidenceThreshold:
+                            od?.confidenceThreshold ?? 0.45,
+                        detectionIntervalMs: od?.intervalMs ?? 800,
+                        showDiagnostics: od?.showDiagnostics ?? true,
+                        onMlUnavailable: (message) {
+                          final cubit = context.read<MlSettingsCubit>();
+                          final current = cubit.state.whenOrNull(
+                            loaded: (s) => s,
                           );
-                        },
-                      ),
-                      ChoiceChip(
-                        label: const Text('Rotate 180'),
-                        selected:
-                            _orientationMode == StreamOrientationMode.rotate180,
-                        onSelected: (_) {
-                          setState(
-                            () => _orientationMode =
-                                StreamOrientationMode.rotate180,
-                          );
-                        },
-                      ),
-                      ChoiceChip(
-                        label: const Text('Rotate 180 + Mirror'),
-                        selected:
-                            _orientationMode ==
-                            StreamOrientationMode.rotate180Mirrored,
-                        onSelected: (_) {
-                          setState(
-                            () => _orientationMode =
-                                StreamOrientationMode.rotate180Mirrored,
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      ChoiceChip(
-                        label: const Text('ML Off'),
-                        selected: _detectionMode == ObjectDetectionMode.off,
-                        onSelected: (_) {
-                          _setDetectionMode(ObjectDetectionMode.off);
-                        },
-                      ),
-                      ChoiceChip(
-                        label: const Text('General'),
-                        selected: _detectionMode == ObjectDetectionMode.general,
-                        onSelected: (_) {
-                          _setDetectionMode(ObjectDetectionMode.general);
-                        },
-                      ),
-                      ChoiceChip(
-                        label: const Text('Person'),
-                        selected:
-                            _detectionMode == ObjectDetectionMode.personOnly,
-                        onSelected: (_) {
-                          _setDetectionMode(ObjectDetectionMode.personOnly);
-                        },
-                      ),
-                      ChoiceChip(
-                        label: const Text('Vehicle'),
-                        selected:
-                            _detectionMode == ObjectDetectionMode.vehicleOnly,
-                        onSelected: (_) {
-                          _setDetectionMode(ObjectDetectionMode.vehicleOnly);
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Text('Confidence'),
-                      Expanded(
-                        child: Slider(
-                          value: _confidenceThreshold,
-                          min: 0.1,
-                          max: 0.95,
-                          divisions: 17,
-                          label: _confidenceThreshold.toStringAsFixed(2),
-                          onChanged: (value) {
-                            setState(() {
-                              _confidenceThreshold = value;
-                            });
-                          },
-                          onChangeEnd: (_) => _saveMlPreferences(),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('Detection Rate'),
-                      const SizedBox(width: 8),
-                      DropdownButton<int>(
-                        value: _detectionIntervalMs,
-                        items: const [
-                          DropdownMenuItem(value: 300, child: Text('Fast')),
-                          DropdownMenuItem(
-                            value: 800,
-                            child: Text('Balanced'),
-                          ),
-                          DropdownMenuItem(
-                            value: 1500,
-                            child: Text('Power Save'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
+                          if (current != null) {
+                            cubit.updateObjectDetection(
+                              current.objectDetection.copyWith(
+                                mode: ObjectDetectionMode.off,
+                              ),
+                            );
                           }
-                          setState(() {
-                            _detectionIntervalMs = value;
-                          });
-                          _saveMlPreferences();
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text(message)));
                         },
+                        refreshNonce: _streamRefreshNonce,
                       ),
-                      const SizedBox(width: 12),
-                      Row(
+                      const SizedBox(height: 10),
+                      // ── Camera orientation chips ─────────────────────────
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
                         children: [
-                          const Text('Diagnostics'),
-                          Switch(
-                            value: _showDiagnostics,
-                            onChanged: (value) {
-                              setState(() {
-                                _showDiagnostics = value;
-                              });
-                              _saveMlPreferences();
-                            },
+                          ChoiceChip(
+                            label: const Text('Normal'),
+                            selected:
+                                _orientationMode ==
+                                StreamOrientationMode.normal,
+                            onSelected: (_) => setState(
+                              () => _orientationMode =
+                                  StreamOrientationMode.normal,
+                            ),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Rotate 180'),
+                            selected:
+                                _orientationMode ==
+                                StreamOrientationMode.rotate180,
+                            onSelected: (_) => setState(
+                              () => _orientationMode =
+                                  StreamOrientationMode.rotate180,
+                            ),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Rotate 180 + Mirror'),
+                            selected:
+                                _orientationMode ==
+                                StreamOrientationMode.rotate180Mirrored,
+                            onSelected: (_) => setState(
+                              () => _orientationMode =
+                                  StreamOrientationMode.rotate180Mirrored,
+                            ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 24),
+                      const DirectionalPadWidget(),
+                      const SizedBox(height: 16),
+                      const LedControlWidget(),
                     ],
-                  ),
-                  const SizedBox(height: 24),
-                  const DirectionalPadWidget(),
-                  const SizedBox(height: 16),
-                  const LedControlWidget(),
-                ],
+                  );
+                },
               ),
             ),
           ),

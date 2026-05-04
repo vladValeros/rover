@@ -8,11 +8,12 @@ import 'package:flutter/material.dart';
 import '../../../../app/locator.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../ml_settings/domain/enums/object_detection_mode.dart';
 import '../services/object_detection_service.dart';
 
-enum StreamOrientationMode { normal, rotate180, rotate180Mirrored }
+export '../../../ml_settings/domain/enums/object_detection_mode.dart';
 
-enum ObjectDetectionMode { off, general, personOnly, vehicleOnly }
+enum StreamOrientationMode { normal, rotate180, rotate180Mirrored }
 
 class DetectionOverlayBox {
   const DetectionOverlayBox({

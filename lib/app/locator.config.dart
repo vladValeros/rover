@@ -30,6 +30,10 @@ import 'package:rover_controll/features/connection/domain/usecases/test_connecti
     as _i148;
 import 'package:rover_controll/features/connection/presentation/controllers/connection_cubit.dart'
     as _i947;
+import 'package:rover_controll/features/ml_settings/data/datasources/ml_settings_local_datasource.dart'
+    as _i125;
+import 'package:rover_controll/features/ml_settings/presentation/controllers/ml_settings_cubit.dart'
+    as _i356;
 import 'package:rover_controll/features/rover_control/data/datasources/rover_remote_datasource.dart'
     as _i880;
 import 'package:rover_controll/features/rover_control/data/repositories/rover_control_repository_impl.dart'
@@ -51,6 +55,12 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i990.DioClient>(() => _i990.DioClient());
     gh.lazySingleton<_i940.ConnectionLocalDatasource>(
       () => _i940.ConnectionLocalDatasource(),
+    );
+    gh.lazySingleton<_i125.MlSettingsLocalDatasource>(
+      () => _i125.MlSettingsLocalDatasource(),
+    );
+    gh.lazySingleton<_i356.MlSettingsCubit>(
+      () => _i356.MlSettingsCubit(gh<_i125.MlSettingsLocalDatasource>()),
     );
     gh.lazySingleton<_i20.ConnectionRemoteDatasource>(
       () => _i20.ConnectionRemoteDatasource(gh<_i990.DioClient>()),

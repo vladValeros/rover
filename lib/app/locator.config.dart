@@ -20,6 +20,8 @@ import 'package:rover_controll/features/connection/data/repositories/connection_
     as _i967;
 import 'package:rover_controll/features/connection/domain/repositories/connection_repository.dart'
     as _i12;
+import 'package:rover_controll/features/connection/domain/usecases/discover_rover_ip_usecase.dart'
+    as _i3;
 import 'package:rover_controll/features/connection/domain/usecases/load_saved_connection_usecase.dart'
     as _i90;
 import 'package:rover_controll/features/connection/domain/usecases/save_connection_usecase.dart'
@@ -71,6 +73,9 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i20.ConnectionRemoteDatasource>(),
       ),
     );
+    gh.lazySingleton<_i3.DiscoverRoverIpUseCase>(
+      () => _i3.DiscoverRoverIpUseCase(gh<_i12.ConnectionRepository>()),
+    );
     gh.lazySingleton<_i90.LoadSavedConnectionUseCase>(
       () => _i90.LoadSavedConnectionUseCase(gh<_i12.ConnectionRepository>()),
     );
@@ -82,6 +87,7 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.factory<_i947.ConnectionCubit>(
       () => _i947.ConnectionCubit(
+        gh<_i3.DiscoverRoverIpUseCase>(),
         gh<_i90.LoadSavedConnectionUseCase>(),
         gh<_i423.SaveConnectionUseCase>(),
         gh<_i148.TestConnectionUseCase>(),

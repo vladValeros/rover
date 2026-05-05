@@ -127,14 +127,9 @@ class ConnectionRemoteDatasource {
       final response = await dio.get<String>(
         'http://$ipAddress:${AppConstants.controlPort}/',
       );
-
-      final body = response.data ?? '';
-      final looksLikeRoverPage =
-          body.contains("startPress('go')") &&
-          body.contains("startPress('back')") &&
-          body.contains("getsend('ledon')");
-
-      if (response.statusCode == 200 && looksLikeRoverPage) {
+      // Accept any HTTP response on the control port — the web UI content
+      // changes between firmware versions so we only check reachability.
+      if (response.statusCode != null) {
         return ipAddress;
       }
       return null;

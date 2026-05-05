@@ -36,11 +36,13 @@ class _RoverControlScreenState extends State<RoverControlScreen>
   final MotionPatternRunner _motionPatternRunner = MotionPatternRunner();
   bool _isMotionPatternRunning = false;
   String _motionPatternStep = 'Idle';
+  late final RoverControlCubit _roverCubit;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _roverCubit = locator<RoverControlCubit>();
   }
 
   @override
@@ -61,13 +63,14 @@ class _RoverControlScreenState extends State<RoverControlScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _motionPatternRunner.stop();
+    _roverCubit.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => locator<RoverControlCubit>(),
+    return BlocProvider.value(
+      value: _roverCubit,
       child: BlocListener<RoverControlCubit, RoverControlState>(
         listener: (context, state) {
           state.whenOrNull(
@@ -115,7 +118,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                 icon: const Icon(Icons.wifi_off),
                 tooltip: 'Disconnect',
                 onPressed: () {
-                  _stopMotionPattern(context, sendStopCommand: true);
+                  _stopMotionPatternDirect(sendStopCommand: true);
                   context.go(ConnectionRoutes.path);
                 },
               ),
@@ -222,12 +225,12 @@ class _RoverControlScreenState extends State<RoverControlScreen>
       enableDrag: false,
       builder: (sheetCtx) => _RoverOfflineSheet(
         onRetry: () {
-          _stopMotionPattern(context, sendStopCommand: true);
+          _stopMotionPatternDirect(sendStopCommand: true);
           Navigator.of(sheetCtx).pop();
           setState(() => _streamRefreshNonce++);
         },
         onGoBack: () {
-          _stopMotionPattern(context, sendStopCommand: true);
+          _stopMotionPatternDirect(sendStopCommand: true);
           Navigator.of(sheetCtx).pop();
           context.go(ConnectionRoutes.path);
         },
@@ -248,12 +251,8 @@ class _RoverControlScreenState extends State<RoverControlScreen>
     }
   }
 
-  void _startMotionPattern(
-    BuildContext context,
-    MotionPatternSettings settings,
-  ) {
+  void _startMotionPattern(MotionPatternSettings settings) {
     if (_isMotionPatternRunning || !settings.enabled) return;
-    final cubit = context.read<RoverControlCubit>();
     final selectedPattern = settings.patterns.firstWhere(
       (p) => p.id == settings.selectedPatternId,
       orElse: () => settings.patterns.first,
@@ -267,7 +266,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
       _motionPatternRunner
           .start(
             settings: settings,
-            sendCommand: cubit.sendCommand,
+            sendCommand: _roverCubit.sendCommand,
             onStep: (stepLabel) {
               if (!mounted) return;
               setState(() => _motionPatternStep = stepLabel);
@@ -285,16 +284,11 @@ class _RoverControlScreenState extends State<RoverControlScreen>
     );
   }
 
-  void _stopMotionPattern(
-    BuildContext context, {
-    required bool sendStopCommand,
-  }) {
+  void _stopMotionPatternDirect({required bool sendStopCommand}) {
     if (!_isMotionPatternRunning && !_motionPatternRunner.isRunning) return;
     _motionPatternRunner.stop();
     if (sendStopCommand) {
-      unawaited(
-        context.read<RoverControlCubit>().sendCommand(RoverCommand.stop),
-      );
+      unawaited(_roverCubit.sendCommand(RoverCommand.stop));
     }
     if (mounted) {
       setState(() {
@@ -316,16 +310,15 @@ class _RoverControlScreenState extends State<RoverControlScreen>
       stepLabel: _motionPatternStep,
       canControl: !widget.isPreviewMode,
       onPatternChanged: (patternId) {
-        final cubit = context.read<MlSettingsCubit>();
-        cubit.updateMotionPattern(
+        context.read<MlSettingsCubit>().updateMotionPattern(
           motionSettings.copyWith(selectedPatternId: patternId),
         );
       },
       onStart: () {
         if (widget.isPreviewMode) return;
-        _startMotionPattern(context, motionSettings);
+        _startMotionPattern(motionSettings);
       },
-      onStop: () => _stopMotionPattern(context, sendStopCommand: true),
+      onStop: () => _stopMotionPatternDirect(sendStopCommand: true),
     );
 
     if (!widget.isPreviewMode) return card;

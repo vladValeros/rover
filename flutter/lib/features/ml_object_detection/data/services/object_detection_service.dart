@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart'
     as mlkit;
-import 'package:image/image.dart' as img;
 
 /// Raw detector result used by stream overlay mapping.
 class RawDetection {
@@ -34,13 +33,15 @@ class ObjectDetectionService {
       return const [];
     }
 
-    final file = File('${Directory.systemTemp.path}/rover_frame_ml.jpg');
-    await file.writeAsBytes(frame, flush: true);
-
-    final decoded = img.decodeJpg(frame);
-    if (decoded == null) {
+    // Parse JPEG dimensions from the frame header — avoids a full CPU decode.
+    final size = _jpegDimensions(frame);
+    if (size == null) {
       return const [];
     }
+
+    // Write without flush — avoids a kernel-level disk sync on every frame.
+    final file = File('${Directory.systemTemp.path}/rover_frame_ml.jpg');
+    await file.writeAsBytes(frame);
 
     final inputImage = mlkit.InputImage.fromFilePath(file.path);
     final objects = await detector.processImage(inputImage);
@@ -58,18 +59,10 @@ class ObjectDetectionService {
       }
 
       final box = object.boundingBox;
-      final normalizedLeft = (box.left / decoded.width)
-          .clamp(0.0, 1.0)
-          .toDouble();
-      final normalizedTop = (box.top / decoded.height)
-          .clamp(0.0, 1.0)
-          .toDouble();
-      final normalizedWidth = (box.width / decoded.width)
-          .clamp(0.0, 1.0)
-          .toDouble();
-      final normalizedHeight = (box.height / decoded.height)
-          .clamp(0.0, 1.0)
-          .toDouble();
+      final normalizedLeft = (box.left / size.width).clamp(0.0, 1.0);
+      final normalizedTop = (box.top / size.height).clamp(0.0, 1.0);
+      final normalizedWidth = (box.width / size.width).clamp(0.0, 1.0);
+      final normalizedHeight = (box.height / size.height).clamp(0.0, 1.0);
       if (normalizedWidth <= 0 || normalizedHeight <= 0) {
         continue;
       }
@@ -77,10 +70,10 @@ class ObjectDetectionService {
       mapped.add(
         RawDetection(
           normalizedRect: Rect.fromLTWH(
-            normalizedLeft,
-            normalizedTop,
-            normalizedWidth,
-            normalizedHeight,
+            normalizedLeft.toDouble(),
+            normalizedTop.toDouble(),
+            normalizedWidth.toDouble(),
+            normalizedHeight.toDouble(),
           ),
           label: label,
           confidence: confidence,
@@ -89,6 +82,36 @@ class ObjectDetectionService {
     }
 
     return mapped;
+  }
+
+  /// Parses JPEG width and height from the raw byte header without doing a
+  /// full image decode. Scans for SOF markers (0xFFC0, 0xFFC2) which carry
+  /// the frame dimensions.
+  ({int width, int height})? _jpegDimensions(Uint8List bytes) {
+    int i = 0;
+    while (i < bytes.length - 1) {
+      if (bytes[i] != 0xFF) {
+        i++;
+        continue;
+      }
+      final marker = bytes[i + 1];
+      // SOF0 = 0xC0, SOF1 = 0xC1, SOF2 = 0xC2 — all carry dimensions at the
+      // same offset within the segment.
+      if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2) {
+        if (i + 8 >= bytes.length) break;
+        final height = (bytes[i + 5] << 8) | bytes[i + 6];
+        final width = (bytes[i + 7] << 8) | bytes[i + 8];
+        if (width > 0 && height > 0) return (width: width, height: height);
+      }
+      // Skip over segment: length field is 2 bytes at offset +2 from marker.
+      if (i + 3 < bytes.length && marker != 0xD8 && marker != 0xD9) {
+        final segLen = (bytes[i + 2] << 8) | bytes[i + 3];
+        i += 2 + segLen;
+      } else {
+        i += 2;
+      }
+    }
+    return null;
   }
 
   Future<mlkit.ObjectDetector?> _ensureDetector() async {

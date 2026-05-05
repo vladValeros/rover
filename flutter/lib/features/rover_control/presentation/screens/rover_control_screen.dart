@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/locator.dart';
 import '../../../autopilot/presentation/cubit/autopilot_cubit.dart';
 import '../../../connection/connection_routes.dart';
+import '../../../ml_motion_detection/presentation/cubit/motion_detection_cubit.dart';
 import '../../../ml_motion_patterns/data/services/motion_pattern_runner.dart';
 import '../../../ml_motion_patterns/domain/entities/motion_pattern_settings.dart';
 import '../../../ml_object_detection/domain/enums/object_detection_mode.dart';
@@ -39,6 +40,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
   String _motionPatternStep = 'Idle';
   late final RoverControlCubit _roverCubit;
   late final AutopilotCubit _autopilotCubit;
+  late final MotionDetectionCubit _motionDetectionCubit;
 
   @override
   void initState() {
@@ -46,6 +48,9 @@ class _RoverControlScreenState extends State<RoverControlScreen>
     WidgetsBinding.instance.addObserver(this);
     _roverCubit = locator<RoverControlCubit>();
     _autopilotCubit = AutopilotCubit(sendCommand: _roverCubit.sendCommand);
+    _motionDetectionCubit = MotionDetectionCubit(
+      sendCommand: _roverCubit.sendCommand,
+    );
   }
 
   @override
@@ -67,6 +72,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
     WidgetsBinding.instance.removeObserver(this);
     _motionPatternRunner.stop();
     _autopilotCubit.close();
+    _motionDetectionCubit.close();
     _roverCubit.close();
     super.dispose();
   }
@@ -137,6 +143,12 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                   final mlSettings = mlState.whenOrNull(loaded: (s) => s);
                   final od = mlSettings?.objectDetection;
                   final mpSettings = mlSettings?.motionPattern;
+                  final mdSettings = mlSettings?.motionDetection;
+
+                  // Keep motion detection cubit in sync with settings.
+                  if (mdSettings != null) {
+                    _motionDetectionCubit.updateSettings(mdSettings);
+                  }
 
                   if (widget.isPreviewMode) {
                     return LayoutBuilder(
@@ -183,8 +195,8 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                                 od?.confidenceThreshold ?? 0.45,
                             detectionIntervalMs: od?.intervalMs ?? 800,
                             showDiagnostics: od?.showDiagnostics ?? true,
-                            onFrameAvailable: null,
-                            onStreamHealthChanged: null,
+                            onFrameAvailable: _motionDetectionCubit.updateFrame,
+                            onStreamHealthChanged: _handleStreamHealthChanged,
                             onMlUnavailable: (message) {
                               final cubit = context.read<MlSettingsCubit>();
                               final current = cubit.state.whenOrNull(
@@ -207,6 +219,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                         ],
                       ),
                       const SizedBox(height: 10),
+                      _buildMotionDetectionStatus(),
                       _buildMotionPatternSection(mpSettings),
                       const SizedBox(height: 12),
                       const LedControlWidget(),
@@ -254,6 +267,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
 
   void _handleStreamHealthChanged(bool healthy) {
     _autopilotCubit.notifyStreamHealth(healthy);
+    _motionDetectionCubit.notifyStreamHealth(healthy);
     // Do not force-stop motion patterns on transient stream freezes.
     // Pattern control should only stop on manual override or confirmed offline.
     if (healthy) return;
@@ -480,6 +494,60 @@ class _RoverControlScreenState extends State<RoverControlScreen>
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMotionDetectionStatus() {
+    return BlocBuilder<MotionDetectionCubit, MotionDetectionState>(
+      bloc: _motionDetectionCubit,
+      builder: (context, mdState) {
+        if (!mdState.enabled) return const SizedBox.shrink();
+
+        final Color color;
+        final IconData icon;
+        final String label;
+
+        switch (mdState.status) {
+          case MotionDetectionStatus.monitoring:
+            color = Colors.blueGrey.shade700;
+            icon = Icons.motion_photos_on_outlined;
+            label =
+                'Monitoring  •  ${(mdState.lastScore * 100).toStringAsFixed(1)}%';
+          case MotionDetectionStatus.detected:
+            color = Colors.deepOrange.shade700;
+            icon = Icons.warning_amber_rounded;
+            label =
+                'Motion detected!  •  ${(mdState.lastScore * 100).toStringAsFixed(1)}%';
+          case MotionDetectionStatus.routine:
+            color = Colors.red.shade700;
+            icon = Icons.sync_rounded;
+            label = 'Alert routine running…';
+          case MotionDetectionStatus.idle:
+            return const SizedBox.shrink();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );

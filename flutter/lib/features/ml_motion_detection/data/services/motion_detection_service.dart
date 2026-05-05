@@ -41,9 +41,8 @@ class MotionDetectionService {
 
   /// Analyses [jpegBytes] and returns a [MotionDetectionResult].
   ///
-  /// [sensitivity] controls what fraction of pixels must change to trigger
-  /// detection (0 = any change, 1 = every pixel must change).  A value of
-  /// 0.10–0.25 is typical.
+  /// [sensitivity] uses engineering range 0.60..0.95.
+  /// Higher sensitivity means lower required changed-pixel ratio.
   MotionDetectionResult analyse({
     required Uint8List jpegBytes,
     required double sensitivity,
@@ -100,9 +99,10 @@ class MotionDetectionService {
     }
 
     final score = changed / total;
+    final normalizedSensitivity = sensitivity.clamp(0.60, 0.95);
     // Sensitivity maps as the minimum score fraction required.
     // Higher sensitivity → smaller threshold → easier to trigger.
-    final threshold = (1.0 - sensitivity).clamp(0.02, 0.98);
+    final threshold = (1.0 - normalizedSensitivity).clamp(0.05, 0.40);
     final detected = score >= threshold;
 
     return MotionDetectionResult(

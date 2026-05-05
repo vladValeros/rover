@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/services/motion_detection_action_runner.dart';
 import '../../data/services/motion_detection_service.dart';
+import '../../data/services/motion_snapshot_storage_service.dart';
 import '../../domain/entities/motion_detection_settings.dart';
 import '../../domain/enums/motion_detection_action_mode.dart';
 import '../../../rover_control/domain/entities/rover_command.dart';
@@ -23,11 +24,15 @@ class MotionDetectionCubit extends Cubit<MotionDetectionState> {
   final MotionDetectionService _service = MotionDetectionService();
   final MotionDetectionActionRunner _actionRunner =
       MotionDetectionActionRunner();
+  final MotionSnapshotStorageService _snapshotStorage =
+      MotionSnapshotStorageService();
 
   MotionDetectionSettings _settings = const MotionDetectionSettings();
   DateTime? _lastDetectionAt;
   DateTime? _lastFrameAt;
+  Uint8List? _latestFrame;
   bool _streamHealthy = true;
+  bool _lightAndSnapshotRunning = false;
 
   // ── Public API ──────────────────────────────────────────────────────────
 
@@ -60,6 +65,7 @@ class MotionDetectionCubit extends Cubit<MotionDetectionState> {
   /// Feed a decoded JPEG frame from the stream viewer.
   void updateFrame(Uint8List jpegBytes) {
     if (!_settings.enabled || !_streamHealthy) return;
+    _latestFrame = jpegBytes;
 
     // Throttle: only analyse once per sampleIntervalMs.
     final now = DateTime.now();
@@ -78,7 +84,7 @@ class MotionDetectionCubit extends Cubit<MotionDetectionState> {
     }
 
     // Do not start a new analysis if action routine is already running.
-    if (_actionRunner.isRunning) return;
+    if (_actionRunner.isRunning || _lightAndSnapshotRunning) return;
 
     // Run pixel-diff in the same isolate — the grid is tiny (32×24) so it
     // completes in < 5 ms on any modern device.
@@ -132,9 +138,17 @@ class MotionDetectionCubit extends Cubit<MotionDetectionState> {
     final mode = _settings.actionMode;
 
     if (mode == MotionDetectionActionMode.overlayOnly) return;
-    if (mode == MotionDetectionActionMode.snapshot) return; // TODO: snapshot
+    if (mode == MotionDetectionActionMode.snapshot) {
+      unawaited(_captureSnapshot());
+      return;
+    }
 
-    // routineOnly or routineAndSnapshot → run alert routine.
+    if (mode == MotionDetectionActionMode.lightAndSnapshot) {
+      unawaited(_runLightThenSnapshot());
+      return;
+    }
+
+    // Routine-only mode.
     if (!isClosed) {
       emit(
         state.copyWith(status: MotionDetectionStatus.routine, enabled: true),
@@ -160,5 +174,50 @@ class MotionDetectionCubit extends Cubit<MotionDetectionState> {
             }
           }),
     );
+  }
+
+  Future<void> _runLightThenSnapshot() async {
+    if (_lightAndSnapshotRunning) return;
+    _lightAndSnapshotRunning = true;
+    if (!isClosed) {
+      emit(
+        state.copyWith(status: MotionDetectionStatus.routine, enabled: true),
+      );
+    }
+
+    try {
+      await _sendCommand(RoverCommand.ledOn);
+      await Future.delayed(const Duration(milliseconds: 2500));
+      await _sendCommand(RoverCommand.ledOff);
+      await _captureSnapshot();
+    } finally {
+      _lightAndSnapshotRunning = false;
+      if (!isClosed) {
+        emit(
+          state.copyWith(
+            status: MotionDetectionStatus.monitoring,
+            enabled: true,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _captureSnapshot() async {
+    final frame = _latestFrame;
+    if (frame == null) {
+      developer.log(
+        'Snapshot requested but no frame is available yet.',
+        name: 'MotionDetectionCubit',
+      );
+      return;
+    }
+
+    try {
+      final path = await _snapshotStorage.save(frame);
+      developer.log('Snapshot saved to $path', name: 'MotionDetectionCubit');
+    } catch (e) {
+      developer.log('Snapshot save failed: $e', name: 'MotionDetectionCubit');
+    }
   }
 }

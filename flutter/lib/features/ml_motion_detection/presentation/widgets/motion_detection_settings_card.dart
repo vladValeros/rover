@@ -96,15 +96,15 @@ class _MotionDetectionBodyState extends State<_MotionDetectionBody> {
                 ),
                 DropdownMenuItem(
                   value: MotionDetectionActionMode.routine,
-                  child: Text('Blink-turn + LED'),
+                  child: Text('Routine only (blink-turn + LED)'),
                 ),
                 DropdownMenuItem(
                   value: MotionDetectionActionMode.snapshot,
                   child: Text('Snapshot only'),
                 ),
                 DropdownMenuItem(
-                  value: MotionDetectionActionMode.routineAndSnapshot,
-                  child: Text('Routine + snapshot'),
+                  value: MotionDetectionActionMode.lightAndSnapshot,
+                  child: Text('Light (2.5s) + snapshot'),
                 ),
               ],
               onChanged: (v) {
@@ -138,9 +138,9 @@ class _MotionDetectionBodyState extends State<_MotionDetectionBody> {
           style: textTheme.labelLarge,
         ),
         Slider(
-          min: 0.05,
-          max: 0.60,
-          divisions: 55,
+          min: 0.60,
+          max: 0.95,
+          divisions: 35,
           label: _localSensitivity.toStringAsFixed(2),
           value: _localSensitivity,
           onChanged: (v) => setState(() => _localSensitivity = v),

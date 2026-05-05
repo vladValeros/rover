@@ -78,7 +78,9 @@ class MlSettingsLocalDatasource {
       enabled: prefs.getBool(_mdEnabledKey) ?? false,
       showOverlay: prefs.getBool(_mdShowOverlayKey) ?? true,
       showDiagnostics: prefs.getBool(_mdShowDiagnosticsKey) ?? false,
-      sensitivity: prefs.getDouble(_mdSensitivityKey) ?? 0.22,
+      sensitivity: _normalizeMotionSensitivity(
+        prefs.getDouble(_mdSensitivityKey),
+      ),
       sampleIntervalMs: prefs.getInt(_mdSampleIntervalMsKey) ?? 350,
       cooldownMs: prefs.getInt(_mdCooldownMsKey) ?? 2500,
       actionMode: actionMode,
@@ -125,7 +127,10 @@ class MlSettingsLocalDatasource {
     await prefs.setBool(_mdEnabledKey, settings.enabled);
     await prefs.setBool(_mdShowOverlayKey, settings.showOverlay);
     await prefs.setBool(_mdShowDiagnosticsKey, settings.showDiagnostics);
-    await prefs.setDouble(_mdSensitivityKey, settings.sensitivity);
+    await prefs.setDouble(
+      _mdSensitivityKey,
+      _normalizeMotionSensitivity(settings.sensitivity),
+    );
     await prefs.setInt(_mdSampleIntervalMsKey, settings.sampleIntervalMs);
     await prefs.setInt(_mdCooldownMsKey, settings.cooldownMs);
     await prefs.setInt(_mdActionModeKey, settings.actionMode.index);
@@ -160,6 +165,18 @@ class MlSettingsLocalDatasource {
     const ids = ['box', 'figure_eight', 'l_pattern', 'shuttle'];
     if (legacyIndex < 0 || legacyIndex >= ids.length) return 'box';
     return ids[legacyIndex];
+  }
+
+  double _normalizeMotionSensitivity(double? raw) {
+    // New engineering range: 0.60..0.95 (higher = more sensitive).
+    // Legacy builds used 0.05..0.30, so remap old saved values forward.
+    if (raw == null) return 0.82;
+    final v = raw.clamp(0.0, 1.0);
+    if (v <= 0.35) {
+      final t = ((v - 0.05) / 0.25).clamp(0.0, 1.0);
+      return (0.60 + (0.35 * t)).clamp(0.60, 0.95);
+    }
+    return v.clamp(0.60, 0.95);
   }
 
   AutopilotSettings _decodeAutopilot(String? json) {

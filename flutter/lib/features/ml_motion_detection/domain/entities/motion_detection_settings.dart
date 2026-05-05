@@ -10,7 +10,7 @@ abstract class MotionDetectionSettings with _$MotionDetectionSettings {
     @Default(false) bool enabled,
     @Default(true) bool showOverlay,
     @Default(false) bool showDiagnostics,
-    @Default(0.22) double sensitivity,
+    @Default(0.82) double sensitivity,
     @Default(350) int sampleIntervalMs,
     @Default(2500) int cooldownMs,
     @Default(MotionDetectionActionMode.routine)

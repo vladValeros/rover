@@ -18,10 +18,10 @@ final _privateConstructorUsedError = UnsupportedError(
 /// @nodoc
 mixin _$MotionPatternSettings {
   bool get enabled => throw _privateConstructorUsedError;
-  MotionPatternType get pattern => throw _privateConstructorUsedError;
-  int get forwardMs => throw _privateConstructorUsedError;
-  int get turn90Ms => throw _privateConstructorUsedError;
-  int get turn180Ms => throw _privateConstructorUsedError;
+  String get selectedPatternId => throw _privateConstructorUsedError;
+  List<MotionPatternDefinition> get patterns =>
+      throw _privateConstructorUsedError;
+  double get turnMsPerDegree => throw _privateConstructorUsedError;
   int get interStepPauseMs => throw _privateConstructorUsedError;
 
   /// Create a copy of MotionPatternSettings
@@ -40,10 +40,9 @@ abstract class $MotionPatternSettingsCopyWith<$Res> {
   @useResult
   $Res call({
     bool enabled,
-    MotionPatternType pattern,
-    int forwardMs,
-    int turn90Ms,
-    int turn180Ms,
+    String selectedPatternId,
+    List<MotionPatternDefinition> patterns,
+    double turnMsPerDegree,
     int interStepPauseMs,
   });
 }
@@ -67,10 +66,9 @@ class _$MotionPatternSettingsCopyWithImpl<
   @override
   $Res call({
     Object? enabled = null,
-    Object? pattern = null,
-    Object? forwardMs = null,
-    Object? turn90Ms = null,
-    Object? turn180Ms = null,
+    Object? selectedPatternId = null,
+    Object? patterns = null,
+    Object? turnMsPerDegree = null,
     Object? interStepPauseMs = null,
   }) {
     return _then(
@@ -79,22 +77,18 @@ class _$MotionPatternSettingsCopyWithImpl<
                 ? _value.enabled
                 : enabled // ignore: cast_nullable_to_non_nullable
                       as bool,
-            pattern: null == pattern
-                ? _value.pattern
-                : pattern // ignore: cast_nullable_to_non_nullable
-                      as MotionPatternType,
-            forwardMs: null == forwardMs
-                ? _value.forwardMs
-                : forwardMs // ignore: cast_nullable_to_non_nullable
-                      as int,
-            turn90Ms: null == turn90Ms
-                ? _value.turn90Ms
-                : turn90Ms // ignore: cast_nullable_to_non_nullable
-                      as int,
-            turn180Ms: null == turn180Ms
-                ? _value.turn180Ms
-                : turn180Ms // ignore: cast_nullable_to_non_nullable
-                      as int,
+            selectedPatternId: null == selectedPatternId
+                ? _value.selectedPatternId
+                : selectedPatternId // ignore: cast_nullable_to_non_nullable
+                      as String,
+            patterns: null == patterns
+                ? _value.patterns
+                : patterns // ignore: cast_nullable_to_non_nullable
+                      as List<MotionPatternDefinition>,
+            turnMsPerDegree: null == turnMsPerDegree
+                ? _value.turnMsPerDegree
+                : turnMsPerDegree // ignore: cast_nullable_to_non_nullable
+                      as double,
             interStepPauseMs: null == interStepPauseMs
                 ? _value.interStepPauseMs
                 : interStepPauseMs // ignore: cast_nullable_to_non_nullable
@@ -116,10 +110,9 @@ abstract class _$$MotionPatternSettingsImplCopyWith<$Res>
   @useResult
   $Res call({
     bool enabled,
-    MotionPatternType pattern,
-    int forwardMs,
-    int turn90Ms,
-    int turn180Ms,
+    String selectedPatternId,
+    List<MotionPatternDefinition> patterns,
+    double turnMsPerDegree,
     int interStepPauseMs,
   });
 }
@@ -140,10 +133,9 @@ class __$$MotionPatternSettingsImplCopyWithImpl<$Res>
   @override
   $Res call({
     Object? enabled = null,
-    Object? pattern = null,
-    Object? forwardMs = null,
-    Object? turn90Ms = null,
-    Object? turn180Ms = null,
+    Object? selectedPatternId = null,
+    Object? patterns = null,
+    Object? turnMsPerDegree = null,
     Object? interStepPauseMs = null,
   }) {
     return _then(
@@ -152,22 +144,18 @@ class __$$MotionPatternSettingsImplCopyWithImpl<$Res>
             ? _value.enabled
             : enabled // ignore: cast_nullable_to_non_nullable
                   as bool,
-        pattern: null == pattern
-            ? _value.pattern
-            : pattern // ignore: cast_nullable_to_non_nullable
-                  as MotionPatternType,
-        forwardMs: null == forwardMs
-            ? _value.forwardMs
-            : forwardMs // ignore: cast_nullable_to_non_nullable
-                  as int,
-        turn90Ms: null == turn90Ms
-            ? _value.turn90Ms
-            : turn90Ms // ignore: cast_nullable_to_non_nullable
-                  as int,
-        turn180Ms: null == turn180Ms
-            ? _value.turn180Ms
-            : turn180Ms // ignore: cast_nullable_to_non_nullable
-                  as int,
+        selectedPatternId: null == selectedPatternId
+            ? _value.selectedPatternId
+            : selectedPatternId // ignore: cast_nullable_to_non_nullable
+                  as String,
+        patterns: null == patterns
+            ? _value._patterns
+            : patterns // ignore: cast_nullable_to_non_nullable
+                  as List<MotionPatternDefinition>,
+        turnMsPerDegree: null == turnMsPerDegree
+            ? _value.turnMsPerDegree
+            : turnMsPerDegree // ignore: cast_nullable_to_non_nullable
+                  as double,
         interStepPauseMs: null == interStepPauseMs
             ? _value.interStepPauseMs
             : interStepPauseMs // ignore: cast_nullable_to_non_nullable
@@ -182,35 +170,37 @@ class __$$MotionPatternSettingsImplCopyWithImpl<$Res>
 class _$MotionPatternSettingsImpl implements _MotionPatternSettings {
   const _$MotionPatternSettingsImpl({
     this.enabled = false,
-    this.pattern = MotionPatternType.box,
-    this.forwardMs = 900,
-    this.turn90Ms = 520,
-    this.turn180Ms = 980,
+    this.selectedPatternId = 'box',
+    final List<MotionPatternDefinition> patterns = _defaultMotionPatterns,
+    this.turnMsPerDegree = 5.6,
     this.interStepPauseMs = 120,
-  });
+  }) : _patterns = patterns;
 
   @override
   @JsonKey()
   final bool enabled;
   @override
   @JsonKey()
-  final MotionPatternType pattern;
+  final String selectedPatternId;
+  final List<MotionPatternDefinition> _patterns;
   @override
   @JsonKey()
-  final int forwardMs;
+  List<MotionPatternDefinition> get patterns {
+    if (_patterns is EqualUnmodifiableListView) return _patterns;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_patterns);
+  }
+
   @override
   @JsonKey()
-  final int turn90Ms;
-  @override
-  @JsonKey()
-  final int turn180Ms;
+  final double turnMsPerDegree;
   @override
   @JsonKey()
   final int interStepPauseMs;
 
   @override
   String toString() {
-    return 'MotionPatternSettings(enabled: $enabled, pattern: $pattern, forwardMs: $forwardMs, turn90Ms: $turn90Ms, turn180Ms: $turn180Ms, interStepPauseMs: $interStepPauseMs)';
+    return 'MotionPatternSettings(enabled: $enabled, selectedPatternId: $selectedPatternId, patterns: $patterns, turnMsPerDegree: $turnMsPerDegree, interStepPauseMs: $interStepPauseMs)';
   }
 
   @override
@@ -219,13 +209,11 @@ class _$MotionPatternSettingsImpl implements _MotionPatternSettings {
         (other.runtimeType == runtimeType &&
             other is _$MotionPatternSettingsImpl &&
             (identical(other.enabled, enabled) || other.enabled == enabled) &&
-            (identical(other.pattern, pattern) || other.pattern == pattern) &&
-            (identical(other.forwardMs, forwardMs) ||
-                other.forwardMs == forwardMs) &&
-            (identical(other.turn90Ms, turn90Ms) ||
-                other.turn90Ms == turn90Ms) &&
-            (identical(other.turn180Ms, turn180Ms) ||
-                other.turn180Ms == turn180Ms) &&
+            (identical(other.selectedPatternId, selectedPatternId) ||
+                other.selectedPatternId == selectedPatternId) &&
+            const DeepCollectionEquality().equals(other._patterns, _patterns) &&
+            (identical(other.turnMsPerDegree, turnMsPerDegree) ||
+                other.turnMsPerDegree == turnMsPerDegree) &&
             (identical(other.interStepPauseMs, interStepPauseMs) ||
                 other.interStepPauseMs == interStepPauseMs));
   }
@@ -234,10 +222,9 @@ class _$MotionPatternSettingsImpl implements _MotionPatternSettings {
   int get hashCode => Object.hash(
     runtimeType,
     enabled,
-    pattern,
-    forwardMs,
-    turn90Ms,
-    turn180Ms,
+    selectedPatternId,
+    const DeepCollectionEquality().hash(_patterns),
+    turnMsPerDegree,
     interStepPauseMs,
   );
 
@@ -257,23 +244,20 @@ class _$MotionPatternSettingsImpl implements _MotionPatternSettings {
 abstract class _MotionPatternSettings implements MotionPatternSettings {
   const factory _MotionPatternSettings({
     final bool enabled,
-    final MotionPatternType pattern,
-    final int forwardMs,
-    final int turn90Ms,
-    final int turn180Ms,
+    final String selectedPatternId,
+    final List<MotionPatternDefinition> patterns,
+    final double turnMsPerDegree,
     final int interStepPauseMs,
   }) = _$MotionPatternSettingsImpl;
 
   @override
   bool get enabled;
   @override
-  MotionPatternType get pattern;
+  String get selectedPatternId;
   @override
-  int get forwardMs;
+  List<MotionPatternDefinition> get patterns;
   @override
-  int get turn90Ms;
-  @override
-  int get turn180Ms;
+  double get turnMsPerDegree;
   @override
   int get interStepPauseMs;
 

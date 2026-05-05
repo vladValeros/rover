@@ -8,7 +8,6 @@ import '../../../../app/locator.dart';
 import '../../../connection/connection_routes.dart';
 import '../../../ml_motion_patterns/data/services/motion_pattern_runner.dart';
 import '../../../ml_motion_patterns/domain/entities/motion_pattern_settings.dart';
-import '../../../ml_motion_patterns/domain/enums/motion_pattern_type.dart';
 import '../../../ml_object_detection/domain/enums/object_detection_mode.dart';
 import '../../../ml_settings/ml_settings_routes.dart';
 import '../../../ml_settings/presentation/controllers/ml_settings_cubit.dart';
@@ -21,7 +20,9 @@ import '../widgets/led_control_widget.dart';
 import '../widgets/rover_stream_viewer_widget.dart';
 
 class RoverControlScreen extends StatefulWidget {
-  const RoverControlScreen({super.key});
+  const RoverControlScreen({this.isPreviewMode = false, super.key});
+
+  final bool isPreviewMode;
 
   @override
   State<RoverControlScreen> createState() => _RoverControlScreenState();
@@ -127,6 +128,41 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                 builder: (context, mlState) {
                   final mlSettings = mlState.whenOrNull(loaded: (s) => s);
                   final od = mlSettings?.objectDetection;
+                  final mpSettings = mlSettings?.motionPattern;
+                  if (widget.isPreviewMode) {
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
+                            ),
+                            child: Column(
+                              children: [
+                                _PreviewStreamFrame(
+                                  onBackToMenu: () =>
+                                      context.go(ConnectionRoutes.path),
+                                ),
+                                const SizedBox(height: 10),
+                                _buildMotionPatternSection(mpSettings),
+                                const SizedBox(height: 12),
+                                IgnorePointer(
+                                  ignoring: true,
+                                  child: Opacity(
+                                    opacity: 0.6,
+                                    child: const LedControlWidget(),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                _buildControlPanel(),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  }
+
                   return Column(
                     children: [
                       RoverStreamViewerWidget(
@@ -156,64 +192,15 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                         onRoverOffline: () => _showOfflineSheet(context),
                       ),
                       const SizedBox(height: 10),
-                      // ── Camera orientation chips ─────────────────────────
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        alignment: WrapAlignment.center,
-                        children: [
-                          ChoiceChip(
-                            label: const Text('Normal'),
-                            selected:
-                                _orientationMode ==
-                                StreamOrientationMode.normal,
-                            onSelected: (_) => setState(
-                              () => _orientationMode =
-                                  StreamOrientationMode.normal,
-                            ),
-                          ),
-                          ChoiceChip(
-                            label: const Text('Rotate 180'),
-                            selected:
-                                _orientationMode ==
-                                StreamOrientationMode.rotate180,
-                            onSelected: (_) => setState(
-                              () => _orientationMode =
-                                  StreamOrientationMode.rotate180,
-                            ),
-                          ),
-                          ChoiceChip(
-                            label: const Text('Rotate 180 + Mirror'),
-                            selected:
-                                _orientationMode ==
-                                StreamOrientationMode.rotate180Mirrored,
-                            onSelected: (_) => setState(
-                              () => _orientationMode =
-                                  StreamOrientationMode.rotate180Mirrored,
-                            ),
-                          ),
-                        ],
-                      ),
+                      _buildMotionPatternSection(mpSettings),
                       const SizedBox(height: 12),
-                      // ── Motion pattern quick-start (near D-pad) ──────────
-                      _MotionPatternRuntimeCard(
-                        settings: mlSettings?.motionPattern,
-                        isRunning: _isMotionPatternRunning,
-                        stepLabel: _motionPatternStep,
-                        onStart: () {
-                          final settings = mlSettings?.motionPattern;
-                          if (settings == null || !settings.enabled) return;
-                          _startMotionPattern(context, settings);
-                        },
-                        onStop: () =>
-                            _stopMotionPattern(context, sendStopCommand: true),
-                      ),
-                      const SizedBox(height: 16),
-                      DirectionalPadWidget(
-                        onManualOverride: _onManualControlOverride,
-                      ),
-                      const SizedBox(height: 16),
                       const LedControlWidget(),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: _buildControlPanel(),
+                        ),
+                      ),
                     ],
                   );
                 },
@@ -267,9 +254,13 @@ class _RoverControlScreenState extends State<RoverControlScreen>
   ) {
     if (_isMotionPatternRunning || !settings.enabled) return;
     final cubit = context.read<RoverControlCubit>();
+    final selectedPattern = settings.patterns.firstWhere(
+      (p) => p.id == settings.selectedPatternId,
+      orElse: () => settings.patterns.first,
+    );
     setState(() {
       _isMotionPatternRunning = true;
-      _motionPatternStep = 'Starting ${settings.pattern.label}';
+      _motionPatternStep = 'Starting ${selectedPattern.name}';
     });
 
     unawaited(
@@ -312,6 +303,52 @@ class _RoverControlScreenState extends State<RoverControlScreen>
       });
     }
   }
+
+  Widget _buildMotionPatternSection(MotionPatternSettings? motionSettings) {
+    final isMotionFeatureEnabled = motionSettings?.enabled ?? false;
+    if (!isMotionFeatureEnabled || motionSettings == null) {
+      return const SizedBox.shrink();
+    }
+
+    final card = _MotionPatternRuntimeCard(
+      settings: motionSettings,
+      isRunning: _isMotionPatternRunning,
+      stepLabel: _motionPatternStep,
+      canControl: !widget.isPreviewMode,
+      onPatternChanged: (patternId) {
+        final cubit = context.read<MlSettingsCubit>();
+        cubit.updateMotionPattern(
+          motionSettings.copyWith(selectedPatternId: patternId),
+        );
+      },
+      onStart: () {
+        if (widget.isPreviewMode) return;
+        _startMotionPattern(context, motionSettings);
+      },
+      onStop: () => _stopMotionPattern(context, sendStopCommand: true),
+    );
+
+    if (!widget.isPreviewMode) return card;
+
+    return Opacity(opacity: 0.85, child: card);
+  }
+
+  Widget _buildControlPanel() {
+    return Column(
+      children: [
+        IgnorePointer(
+          ignoring: widget.isPreviewMode,
+          child: Opacity(
+            opacity: widget.isPreviewMode ? 0.6 : 1,
+            child: DirectionalPadWidget(
+              onManualOverride: _onManualControlOverride,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
 }
 
 class _MotionPatternRuntimeCard extends StatelessWidget {
@@ -319,13 +356,17 @@ class _MotionPatternRuntimeCard extends StatelessWidget {
     required this.settings,
     required this.isRunning,
     required this.stepLabel,
+    required this.canControl,
+    required this.onPatternChanged,
     required this.onStart,
     required this.onStop,
   });
 
-  final MotionPatternSettings? settings;
+  final MotionPatternSettings settings;
   final bool isRunning;
   final String stepLabel;
+  final bool canControl;
+  final ValueChanged<String> onPatternChanged;
   final VoidCallback onStart;
   final VoidCallback onStop;
 
@@ -333,51 +374,127 @@ class _MotionPatternRuntimeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final isEnabled = settings?.enabled ?? false;
-    final patternLabel = settings?.pattern.label ?? 'Unknown';
+    final selectedPattern = settings.patterns.firstWhere(
+      (p) => p.id == settings.selectedPatternId,
+      orElse: () => settings.patterns.first,
+    );
 
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
           children: [
-            Row(
-              children: [
-                Icon(Icons.route, size: 18, color: cs.primary),
-                const SizedBox(width: 8),
-                Text('Motion Pattern AI', style: tt.titleSmall),
-                const Spacer(),
-                _StatePill(isRunning: isRunning, enabled: isEnabled),
-              ],
+            Icon(Icons.route, size: 18, color: cs.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: DropdownButton<String>(
+                value: selectedPattern.id,
+                isExpanded: true,
+                isDense: true,
+                underline: const SizedBox.shrink(),
+                items: settings.patterns
+                    .map(
+                      (pattern) => DropdownMenuItem(
+                        value: pattern.id,
+                        child: Text(
+                          pattern.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: tt.bodyMedium,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: isRunning
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        onPatternChanged(value);
+                      },
+              ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              isEnabled
-                  ? 'Pattern: $patternLabel | Step: $stepLabel'
-                  : 'Enable Motion Patterns from ML Settings first.',
-              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            const SizedBox(width: 8),
+            _StatePill(isRunning: isRunning, enabled: true),
+            const SizedBox(width: 8),
+            FilledButton.tonalIcon(
+              onPressed: (!isRunning && canControl) ? onStart : null,
+              icon: const Icon(Icons.play_arrow, size: 16),
+              label: const Text('Start'),
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: isEnabled && !isRunning ? onStart : null,
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Start Pattern'),
+            const SizedBox(width: 6),
+            OutlinedButton.icon(
+              onPressed: (isRunning && canControl) ? onStop : null,
+              icon: const Icon(Icons.stop, size: 14),
+              label: const Text('Stop'),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewStreamFrame extends StatelessWidget {
+  const _PreviewStreamFrame({required this.onBackToMenu});
+
+  final VoidCallback onBackToMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return AspectRatio(
+      aspectRatio: 4 / 3,
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.wifi_off_rounded, color: cs.error, size: 36),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Rover disconnected',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Preview mode: stream disabled',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 8,
+              top: 8,
+              child: OutlinedButton.icon(
+                onPressed: onBackToMenu,
+                icon: const Icon(Icons.arrow_back, size: 16),
+                label: const Text('Menu'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: isRunning ? onStop : null,
-                    icon: const Icon(Icons.stop),
-                    label: const Text('Stop Pattern'),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),

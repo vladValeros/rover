@@ -21,6 +21,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     text: AppConstants.defaultRoverIp,
   );
   String? _errorMessage;
+  bool _isConnectionVerified = false;
 
   @override
   void dispose() {
@@ -34,17 +35,32 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       listener: (context, state) {
         state.whenOrNull(
           loaded: (connection) {
+            // Keep user on start menu. A previously saved address should
+            // prefill the field, not auto-enter controller.
+            setState(() {
+              _errorMessage = null;
+              _ipController.text = connection.roverIpAddress;
+              _isConnectionVerified = false;
+            });
             locator<DioClient>().updateBaseUrl(connection.roverIpAddress);
-            context.go(RoverControlRoutes.path);
           },
           saved: (connection) {
             locator<DioClient>().updateBaseUrl(connection.roverIpAddress);
             context.go(RoverControlRoutes.path);
           },
-          testing: () => setState(() => _errorMessage = null),
-          loading: () => setState(() => _errorMessage = null),
+          testing: () => setState(() {
+            _errorMessage = null;
+            _isConnectionVerified = false;
+          }),
+          loading: () => setState(() {
+            _errorMessage = null;
+            _isConnectionVerified = false;
+          }),
           testSuccess: () {
-            setState(() => _errorMessage = null);
+            setState(() {
+              _errorMessage = null;
+              _isConnectionVerified = true;
+            });
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('Rover reachable! Tap Connect to proceed.'),
@@ -56,6 +72,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
             setState(() {
               _errorMessage = null;
               _ipController.text = ipAddress;
+              _isConnectionVerified = false;
             });
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -64,8 +81,14 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               ),
             );
           },
-          discovering: () => setState(() => _errorMessage = null),
-          failure: (message) => setState(() => _errorMessage = message),
+          discovering: () => setState(() {
+            _errorMessage = null;
+            _isConnectionVerified = false;
+          }),
+          failure: (message) => setState(() {
+            _errorMessage = message;
+            _isConnectionVerified = false;
+          }),
         );
       },
       child: Scaffold(
@@ -103,7 +126,10 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                     prefixIcon: Icon(Icons.wifi),
                   ),
                   keyboardType: TextInputType.url,
-                  onChanged: (_) => setState(() => _errorMessage = null),
+                  onChanged: (_) => setState(() {
+                    _errorMessage = null;
+                    _isConnectionVerified = false;
+                  }),
                 ),
                 const SizedBox(height: 16),
                 BlocBuilder<ConnectionCubit, RoverConnectionState>(
@@ -196,7 +222,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                         ),
                         const SizedBox(height: 12),
                         ElevatedButton(
-                          onPressed: isBusy
+                          onPressed: (isBusy || !_isConnectionVerified)
                               ? null
                               : () => context
                                     .read<ConnectionCubit>()
@@ -211,6 +237,19 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                                 )
                               : const Text('Connect'),
                         ),
+                        if (!_isConnectionVerified) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Test connection first to enable Connect.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withAlpha(180),
+                                ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         TextButton.icon(
                           onPressed: isBusy
@@ -218,7 +257,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                               : () {
                                   final ip = _ipController.text.trim();
                                   locator<DioClient>().updateBaseUrl(ip);
-                                  context.go(RoverControlRoutes.path);
+                                  context.go(RoverControlRoutes.previewPath());
                                 },
                           icon: const Icon(Icons.developer_mode_outlined),
                           label: const Text('Open Controller (Offline)'),

@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import '../../domain/entities/motion_pattern_definition.dart';
 import '../../domain/entities/motion_pattern_settings.dart';
-import '../../domain/enums/motion_pattern_type.dart';
+import '../../domain/entities/motion_pattern_step.dart';
+import '../../domain/enums/motion_step_direction.dart';
 import '../../../rover_control/domain/entities/rover_command.dart';
 
 typedef MotionCommandSender = Future<void> Function(RoverCommand command);
@@ -26,7 +28,9 @@ class MotionPatternRunner {
 
     try {
       while (_isActive(runToken)) {
-        final steps = _buildSteps(settings);
+        final selected = _selectedPattern(settings);
+        final steps = _buildSteps(settings, selected);
+        if (steps.isEmpty) return;
         for (final step in steps) {
           if (!_isActive(runToken)) break;
 
@@ -72,53 +76,48 @@ class MotionPatternRunner {
     }
   }
 
-  List<_PatternStep> _buildSteps(MotionPatternSettings settings) {
-    switch (settings.pattern) {
-      case MotionPatternType.box:
-        return [
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn Right 90', RoverCommand.right, settings.turn90Ms),
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn Right 90', RoverCommand.right, settings.turn90Ms),
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn Right 90', RoverCommand.right, settings.turn90Ms),
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn Right 90', RoverCommand.right, settings.turn90Ms),
-        ];
-      case MotionPatternType.figureEight:
-        return [
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn Right 90', RoverCommand.right, settings.turn90Ms),
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn Right 90', RoverCommand.right, settings.turn90Ms),
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn Left 90', RoverCommand.left, settings.turn90Ms),
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn Left 90', RoverCommand.left, settings.turn90Ms),
-        ];
-      case MotionPatternType.lPattern:
-        return [
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn Left 90', RoverCommand.left, settings.turn90Ms),
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn Left 180', RoverCommand.left, settings.turn180Ms),
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn Right 90', RoverCommand.right, settings.turn90Ms),
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep(
-            'Turn Right 180',
-            RoverCommand.right,
-            settings.turn180Ms,
-          ),
-        ];
-      case MotionPatternType.shuttle:
-        return [
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn 180°', RoverCommand.right, settings.turn180Ms),
-          _PatternStep('Forward', RoverCommand.forward, settings.forwardMs),
-          _PatternStep('Turn 180°', RoverCommand.right, settings.turn180Ms),
-        ];
+  MotionPatternDefinition? _selectedPattern(MotionPatternSettings settings) {
+    for (final p in settings.patterns) {
+      if (p.id == settings.selectedPatternId) return p;
     }
+    return settings.patterns.isEmpty ? null : settings.patterns.first;
+  }
+
+  List<_PatternStep> _buildSteps(
+    MotionPatternSettings settings,
+    MotionPatternDefinition? pattern,
+  ) {
+    if (pattern == null) return const [];
+
+    final List<_PatternStep> result = [];
+    for (final step in pattern.steps) {
+      switch (step.kind) {
+        case MotionStepKind.forward:
+          result.add(
+            _PatternStep(
+              'Forward ${step.forwardMs}ms',
+              RoverCommand.forward,
+              step.forwardMs,
+            ),
+          );
+        case MotionStepKind.turn:
+          final holdMs = (step.turnDegrees * settings.turnMsPerDegree)
+              .round()
+              .clamp(120, 4000);
+          final command = step.turnDirection == MotionStepDirection.left
+              ? RoverCommand.left
+              : RoverCommand.right;
+          result.add(
+            _PatternStep(
+              'Turn ${step.turnDirection.label} ${step.turnDegrees}°',
+              command,
+              holdMs,
+            ),
+          );
+      }
+    }
+
+    return result;
   }
 }
 

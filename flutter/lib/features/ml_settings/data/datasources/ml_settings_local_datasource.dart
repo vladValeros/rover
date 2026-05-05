@@ -1,8 +1,10 @@
+import 'dart:convert';
+
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../ml_motion_patterns/domain/entities/motion_pattern_definition.dart';
 import '../../../ml_motion_patterns/domain/entities/motion_pattern_settings.dart';
-import '../../../ml_motion_patterns/domain/enums/motion_pattern_type.dart';
 import '../../../ml_object_detection/domain/entities/object_detection_settings.dart';
 import '../../../ml_object_detection/domain/enums/object_detection_mode.dart';
 import '../../domain/entities/ml_settings_entity.dart';
@@ -15,11 +17,13 @@ class MlSettingsLocalDatasource {
   static const String _odDiagnosticsKey = 'ml_od_show_diagnostics';
 
   static const String _mpEnabledKey = 'ml_mp_enabled';
-  static const String _mpPatternKey = 'ml_mp_pattern';
-  static const String _mpForwardMsKey = 'ml_mp_forward_ms';
-  static const String _mpTurn90MsKey = 'ml_mp_turn90_ms';
-  static const String _mpTurn180MsKey = 'ml_mp_turn180_ms';
+  static const String _mpSelectedPatternIdKey = 'ml_mp_selected_pattern_id';
+  static const String _mpPatternsJsonKey = 'ml_mp_patterns_json';
+  static const String _mpTurnMsPerDegreeKey = 'ml_mp_turn_ms_per_degree';
   static const String _mpInterStepPauseMsKey = 'ml_mp_inter_step_pause_ms';
+
+  // Legacy keys kept for migration fallback.
+  static const String _mpPatternKeyLegacy = 'ml_mp_pattern';
 
   Future<MlSettingsEntity> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -29,12 +33,20 @@ class MlSettingsLocalDatasource {
       intervalMs: prefs.getInt(_odIntervalKey) ?? 800,
       showDiagnostics: prefs.getBool(_odDiagnosticsKey) ?? true,
     );
+    final patternsJson = prefs.getString(_mpPatternsJsonKey);
+    final List<MotionPatternDefinition> patterns = _decodePatterns(
+      patternsJson,
+    );
+
+    final selectedPatternId =
+        prefs.getString(_mpSelectedPatternIdKey) ??
+        _migrateLegacyPatternId(prefs.getInt(_mpPatternKeyLegacy) ?? 0);
+
     final mpSettings = MotionPatternSettings(
       enabled: prefs.getBool(_mpEnabledKey) ?? false,
-      pattern: MotionPatternType.values[prefs.getInt(_mpPatternKey) ?? 0],
-      forwardMs: prefs.getInt(_mpForwardMsKey) ?? 900,
-      turn90Ms: prefs.getInt(_mpTurn90MsKey) ?? 520,
-      turn180Ms: prefs.getInt(_mpTurn180MsKey) ?? 980,
+      selectedPatternId: selectedPatternId,
+      patterns: patterns,
+      turnMsPerDegree: prefs.getDouble(_mpTurnMsPerDegreeKey) ?? 5.6,
       interStepPauseMs: prefs.getInt(_mpInterStepPauseMsKey) ?? 120,
     );
     return MlSettingsEntity(
@@ -54,10 +66,40 @@ class MlSettingsLocalDatasource {
   Future<void> saveMotionPattern(MotionPatternSettings settings) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_mpEnabledKey, settings.enabled);
-    await prefs.setInt(_mpPatternKey, settings.pattern.index);
-    await prefs.setInt(_mpForwardMsKey, settings.forwardMs);
-    await prefs.setInt(_mpTurn90MsKey, settings.turn90Ms);
-    await prefs.setInt(_mpTurn180MsKey, settings.turn180Ms);
+    await prefs.setString(_mpSelectedPatternIdKey, settings.selectedPatternId);
+    await prefs.setString(
+      _mpPatternsJsonKey,
+      jsonEncode(settings.patterns.map((e) => e.toMap()).toList()),
+    );
+    await prefs.setDouble(_mpTurnMsPerDegreeKey, settings.turnMsPerDegree);
     await prefs.setInt(_mpInterStepPauseMsKey, settings.interStepPauseMs);
+  }
+
+  List<MotionPatternDefinition> _decodePatterns(String? jsonString) {
+    if (jsonString == null || jsonString.isEmpty) {
+      return const MotionPatternSettings().patterns;
+    }
+    try {
+      final decoded = jsonDecode(jsonString);
+      if (decoded is! List) return const MotionPatternSettings().patterns;
+      final patterns = decoded
+          .whereType<Map>()
+          .map(
+            (e) =>
+                MotionPatternDefinition.fromMap(Map<String, dynamic>.from(e)),
+          )
+          .toList();
+      return patterns.isEmpty
+          ? const MotionPatternSettings().patterns
+          : patterns;
+    } catch (_) {
+      return const MotionPatternSettings().patterns;
+    }
+  }
+
+  String _migrateLegacyPatternId(int legacyIndex) {
+    const ids = ['box', 'figure_eight', 'l_pattern', 'shuttle'];
+    if (legacyIndex < 0 || legacyIndex >= ids.length) return 'box';
+    return ids[legacyIndex];
   }
 }

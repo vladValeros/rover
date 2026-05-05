@@ -5,7 +5,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/locator.dart';
+import '../../../autopilot/presentation/cubit/autopilot_cubit.dart';
 import '../../../connection/connection_routes.dart';
+import '../../../ml_motion_detection/presentation/cubit/motion_detection_cubit.dart';
 import '../../../ml_motion_patterns/data/services/motion_pattern_runner.dart';
 import '../../../ml_motion_patterns/domain/entities/motion_pattern_settings.dart';
 import '../../../ml_object_detection/domain/enums/object_detection_mode.dart';
@@ -37,12 +39,18 @@ class _RoverControlScreenState extends State<RoverControlScreen>
   bool _isMotionPatternRunning = false;
   String _motionPatternStep = 'Idle';
   late final RoverControlCubit _roverCubit;
+  late final AutopilotCubit _autopilotCubit;
+  late final MotionDetectionCubit _motionDetectionCubit;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _roverCubit = locator<RoverControlCubit>();
+    _autopilotCubit = AutopilotCubit(sendCommand: _roverCubit.sendCommand);
+    _motionDetectionCubit = MotionDetectionCubit(
+      sendCommand: _roverCubit.sendCommand,
+    );
   }
 
   @override
@@ -63,6 +71,8 @@ class _RoverControlScreenState extends State<RoverControlScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _motionPatternRunner.stop();
+    _autopilotCubit.close();
+    _motionDetectionCubit.close();
     _roverCubit.close();
     super.dispose();
   }
@@ -75,13 +85,14 @@ class _RoverControlScreenState extends State<RoverControlScreen>
         listener: (context, state) {
           state.whenOrNull(
             failure: (message) {
-              ScaffoldMessenger.of(context).showSnackBar(
+              final messenger = ScaffoldMessenger.of(context);
+              messenger.clearSnackBars();
+              messenger.showSnackBar(
                 SnackBar(
                   content: Text(message),
                   action: SnackBarAction(
                     label: 'Dismiss',
-                    onPressed: () =>
-                        ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+                    onPressed: messenger.clearSnackBars,
                   ),
                 ),
               );
@@ -132,6 +143,13 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                   final mlSettings = mlState.whenOrNull(loaded: (s) => s);
                   final od = mlSettings?.objectDetection;
                   final mpSettings = mlSettings?.motionPattern;
+                  final mdSettings = mlSettings?.motionDetection;
+
+                  // Keep motion detection cubit in sync with settings.
+                  if (mdSettings != null) {
+                    _motionDetectionCubit.updateSettings(mdSettings);
+                  }
+
                   if (widget.isPreviewMode) {
                     return LayoutBuilder(
                       builder: (context, constraints) {
@@ -168,33 +186,40 @@ class _RoverControlScreenState extends State<RoverControlScreen>
 
                   return Column(
                     children: [
-                      RoverStreamViewerWidget(
-                        orientationMode: _orientationMode,
-                        detectionMode: od?.mode ?? ObjectDetectionMode.off,
-                        detectionConfidenceThreshold:
-                            od?.confidenceThreshold ?? 0.45,
-                        detectionIntervalMs: od?.intervalMs ?? 800,
-                        showDiagnostics: od?.showDiagnostics ?? true,
-                        onMlUnavailable: (message) {
-                          final cubit = context.read<MlSettingsCubit>();
-                          final current = cubit.state.whenOrNull(
-                            loaded: (s) => s,
-                          );
-                          if (current != null) {
-                            cubit.updateObjectDetection(
-                              current.objectDetection.copyWith(
-                                mode: ObjectDetectionMode.off,
-                              ),
-                            );
-                          }
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: Text(message)));
-                        },
-                        refreshNonce: _streamRefreshNonce,
-                        onRoverOffline: () => _showOfflineSheet(context),
+                      Stack(
+                        children: [
+                          RoverStreamViewerWidget(
+                            orientationMode: _orientationMode,
+                            detectionMode: od?.mode ?? ObjectDetectionMode.off,
+                            detectionConfidenceThreshold:
+                                od?.confidenceThreshold ?? 0.45,
+                            detectionIntervalMs: od?.intervalMs ?? 800,
+                            showDiagnostics: od?.showDiagnostics ?? true,
+                            onFrameAvailable: _motionDetectionCubit.updateFrame,
+                            onStreamHealthChanged: _handleStreamHealthChanged,
+                            onMlUnavailable: (message) {
+                              final cubit = context.read<MlSettingsCubit>();
+                              final current = cubit.state.whenOrNull(
+                                loaded: (s) => s,
+                              );
+                              if (current != null) {
+                                cubit.updateObjectDetection(
+                                  current.objectDetection.copyWith(
+                                    mode: ObjectDetectionMode.off,
+                                  ),
+                                );
+                              }
+                              ScaffoldMessenger.of(
+                                context,
+                              ).showSnackBar(SnackBar(content: Text(message)));
+                            },
+                            refreshNonce: _streamRefreshNonce,
+                            onRoverOffline: () => _showOfflineSheet(context),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 10),
+                      _buildMotionDetectionStatus(),
                       _buildMotionPatternSection(mpSettings),
                       const SizedBox(height: 12),
                       const LedControlWidget(),
@@ -238,6 +263,14 @@ class _RoverControlScreenState extends State<RoverControlScreen>
     ).whenComplete(() {
       if (mounted) _offlineSheetShown = false;
     });
+  }
+
+  void _handleStreamHealthChanged(bool healthy) {
+    _autopilotCubit.notifyStreamHealth(healthy);
+    _motionDetectionCubit.notifyStreamHealth(healthy);
+    // Do not force-stop motion patterns on transient stream freezes.
+    // Pattern control should only stop on manual override or confirmed offline.
+    if (healthy) return;
   }
 
   void _onManualControlOverride() {
@@ -296,6 +329,228 @@ class _RoverControlScreenState extends State<RoverControlScreen>
         _motionPatternStep = 'Idle';
       });
     }
+  }
+
+  Widget _buildAutopilotBar() {
+    return BlocBuilder<AutopilotCubit, AutopilotState>(
+      bloc: _autopilotCubit,
+      builder: (context, state) {
+        final cubit = _autopilotCubit;
+        final isRunning = state is AutopilotRunning;
+        final isLagged = state is AutopilotStreamLagged;
+        final statusText = cubit.statusText;
+        final centerDepth = cubit.latestCenterDepth;
+        final showWarning =
+            isLagged || !cubit.isDepthAvailable || cubit.isBlocked;
+        final Color? statusColor = isLagged
+            ? Colors.orange.shade800
+            : !cubit.isDepthAvailable
+            ? Colors.red.shade700
+            : cubit.isBlocked
+            ? Colors.deepOrange.shade700
+            : Colors.blueGrey.shade800;
+        final IconData statusIcon = isLagged
+            ? Icons.warning_amber_rounded
+            : !cubit.isDepthAvailable
+            ? Icons.error_outline_rounded
+            : cubit.isAvoiding
+            ? Icons.sync_rounded
+            : cubit.isBlocked
+            ? Icons.report_problem_outlined
+            : Icons.insights_outlined;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (isLagged || statusText.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(statusIcon, color: Colors.white, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        centerDepth == null
+                            ? statusText
+                            : '$statusText  •  depth ${centerDepth.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            FilledButton.icon(
+              onPressed: (!isRunning && !isLagged && !cubit.isDepthAvailable)
+                  ? null
+                  : () {
+                      if (isRunning || isLagged) {
+                        _autopilotCubit.stop();
+                      } else {
+                        // Stop any manual pattern first.
+                        _stopMotionPatternDirect(sendStopCommand: false);
+                        _autopilotCubit.start();
+                      }
+                    },
+              icon: Icon(
+                (isRunning || isLagged)
+                    ? Icons.stop_circle_outlined
+                    : showWarning
+                    ? Icons.shield_outlined
+                    : Icons.smart_toy_outlined,
+              ),
+              label: Text(
+                (isRunning || isLagged)
+                    ? 'Stop Autopilot'
+                    : cubit.isDepthAvailable
+                    ? 'Start Autopilot'
+                    : 'Depth Unavailable',
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: (isRunning || isLagged)
+                    ? Colors.red.shade700
+                    : null,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAutopilotStreamOverlay() {
+    return BlocBuilder<AutopilotCubit, AutopilotState>(
+      bloc: _autopilotCubit,
+      builder: (context, state) {
+        final cubit = _autopilotCubit;
+        final centerDepth = cubit.latestCenterDepth;
+        final isLagged = state is AutopilotStreamLagged;
+        final borderColor = isLagged
+            ? Colors.orangeAccent
+            : !cubit.isDepthAvailable
+            ? Colors.redAccent
+            : cubit.isBlocked
+            ? Colors.deepOrangeAccent
+            : Colors.lightGreenAccent;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: FractionallySizedBox(
+                widthFactor: 0.34,
+                heightFactor: 0.34,
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: borderColor, width: 2),
+                    borderRadius: BorderRadius.circular(12),
+                    color: borderColor.withAlpha(22),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 8,
+              top: 8,
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 240),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withAlpha(170),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: borderColor.withAlpha(180)),
+                ),
+                child: DefaultTextStyle(
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Autopilot probe'),
+                      const SizedBox(height: 2),
+                      Text(cubit.statusText),
+                      Text(
+                        centerDepth == null
+                            ? 'depth: --'
+                            : 'depth: ${centerDepth.toStringAsFixed(2)}',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMotionDetectionStatus() {
+    return BlocBuilder<MotionDetectionCubit, MotionDetectionState>(
+      bloc: _motionDetectionCubit,
+      builder: (context, mdState) {
+        if (!mdState.enabled) return const SizedBox.shrink();
+
+        final Color color;
+        final IconData icon;
+        final String label;
+
+        switch (mdState.status) {
+          case MotionDetectionStatus.monitoring:
+            color = Colors.blueGrey.shade700;
+            icon = Icons.motion_photos_on_outlined;
+            label =
+                'Monitoring  •  ${(mdState.lastScore * 100).toStringAsFixed(1)}%';
+          case MotionDetectionStatus.detected:
+            color = Colors.deepOrange.shade700;
+            icon = Icons.warning_amber_rounded;
+            label =
+                'Motion detected!  •  ${(mdState.lastScore * 100).toStringAsFixed(1)}%';
+          case MotionDetectionStatus.routine:
+            color = Colors.red.shade700;
+            icon = Icons.sync_rounded;
+            label = 'Alert routine running…';
+          case MotionDetectionStatus.idle:
+            return const SizedBox.shrink();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildMotionPatternSection(MotionPatternSettings? motionSettings) {

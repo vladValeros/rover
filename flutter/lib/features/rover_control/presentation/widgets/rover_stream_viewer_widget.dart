@@ -59,6 +59,8 @@ class RoverStreamViewerWidget extends StatefulWidget {
     this.showDiagnostics = true,
     this.onMlUnavailable,
     this.onRoverOffline,
+    this.onStreamHealthChanged,
+    this.onFrameAvailable,
     super.key,
   });
 
@@ -78,6 +80,16 @@ class RoverStreamViewerWidget extends StatefulWidget {
   /// The parent screen should surface navigation options to the user.
   final VoidCallback? onRoverOffline;
 
+  /// Called whenever stream health changes.
+  /// `true`  = stream is actively delivering frames (healthy).
+  /// `false` = stream is frozen, failed, or the rover is offline.
+  final ValueChanged<bool>? onStreamHealthChanged;
+
+  /// Called for every decoded JPEG frame, before ML inference.
+  /// Use this to feed raw frames to additional on-device pipelines
+  /// (e.g. the autopilot depth-estimation loop).
+  final ValueChanged<Uint8List>? onFrameAvailable;
+
   @override
   State<RoverStreamViewerWidget> createState() =>
       _RoverStreamViewerWidgetState();
@@ -85,7 +97,7 @@ class RoverStreamViewerWidget extends StatefulWidget {
 
 class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   static const Duration _watchdogInterval = Duration(seconds: 2);
-  static const Duration _freezeThreshold = Duration(seconds: 6);
+  static const Duration _freezeThreshold = Duration(seconds: 10);
   static const Duration _autoReconnectDelay = Duration(seconds: 1);
   static const Duration _streamConnectTimeout = Duration(seconds: 20);
 
@@ -101,6 +113,12 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   Timer? _watchdogTimer;
   Timer? _reconnectTimer;
   DateTime? _lastFrameAt;
+  DateTime? _lastChunkAt;
+  int _lastChunkBytes = 0;
+  int _lastBufferBytes = 0;
+  int _lastFrameBytes = 0;
+  int _lastReconnectDelayMs = 0;
+  String _lastStreamEvent = 'init';
   DateTime? _lastInferenceAt;
   bool _isStarting = false;
   bool _isDetecting = false;
@@ -155,6 +173,11 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   Future<void> _startStream() async {
     if (_isStarting) return;
     _isStarting = true;
+    _logInfo(
+      'stream',
+      'start requested | status=${_streamStatusLabel(_streamStatus)} '
+          'failures=$_consecutiveFailures reconnects=$_reconnectCount',
+    );
 
     _reconnectTimer?.cancel();
     _cancelToken?.cancel();
@@ -195,11 +218,27 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         streamUri,
         cancelToken: _cancelToken,
       );
+      _logInfo('stream', 'connected | endpoint=$streamUri');
 
       final List<int> buffer = [];
       _streamSubscription = response.data!.stream.listen(
         (chunk) {
+          final now = DateTime.now();
+          final previousChunkAt = _lastChunkAt;
+          final gapMs = previousChunkAt == null
+              ? 0
+              : now.difference(previousChunkAt).inMilliseconds;
+          _lastChunkAt = now;
+          _lastChunkBytes = chunk.length;
           buffer.addAll(chunk);
+          _lastBufferBytes = buffer.length;
+          if (gapMs >= 800) {
+            _logWarn(
+              'stream',
+              'chunk gap ${gapMs}ms | chunk=${chunk.length}B '
+                  'buffer=${buffer.length}B state=${_streamStatusLabel(_streamStatus)}',
+            );
+          }
           _extractFrames(buffer);
         },
         onError: (error) => _onStreamFailure(error.toString()),
@@ -216,40 +255,74 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   }
 
   void _extractFrames(List<int> buffer) {
-    int startIndex = -1;
+    // Drain all complete JPEG frames currently available in buffer and render
+    // only the newest one. This avoids lag accumulation when multiple frames
+    // arrive in a burst after chunk gaps.
+    Uint8List? latestFrame;
+    while (true) {
+      int startIndex = -1;
+      int endIndex = -1;
 
-    for (int i = 0; i < buffer.length - 1; i++) {
-      if (buffer[i] == 0xFF && buffer[i + 1] == 0xD8) {
-        startIndex = i;
-      }
-      if (startIndex != -1 &&
-          buffer[i] == 0xFF &&
-          buffer[i + 1] == 0xD9 &&
-          i > startIndex) {
-        final frame = Uint8List.fromList(buffer.sublist(startIndex, i + 2));
-        buffer.removeRange(0, i + 2);
-        final recoveredFromFailure = _streamStatus != _StreamStatus.streaming;
-        if (mounted) {
-          setState(() {
-            _currentFrame = frame;
-            _lastFrameAt = DateTime.now();
-            // Successful frame: reset failure tracking.
-            if (_streamStatus != _StreamStatus.streaming) {
-              _streamStatus = _StreamStatus.streaming;
-              _consecutiveFailures = 0;
-              _errorMessage = null;
-            }
-          });
+      for (int i = 0; i < buffer.length - 1; i++) {
+        if (buffer[i] == 0xFF && buffer[i + 1] == 0xD8) {
+          startIndex = i;
         }
-        if (recoveredFromFailure && mounted) {
-          unawaited(
-            context.read<RoverControlCubit>().reapplyLedStateAfterReconnect(),
-          );
+        if (startIndex != -1 &&
+            buffer[i] == 0xFF &&
+            buffer[i + 1] == 0xD9 &&
+            i > startIndex) {
+          endIndex = i + 1;
+          break;
         }
-        _runDetectionIfNeeded(frame);
-        return;
       }
+
+      if (startIndex == -1 || endIndex == -1) {
+        break;
+      }
+
+      latestFrame = Uint8List.fromList(
+        buffer.sublist(startIndex, endIndex + 1),
+      );
+      buffer.removeRange(0, endIndex + 1);
+      _lastBufferBytes = buffer.length;
+      _lastFrameBytes = latestFrame.length;
     }
+
+    if (latestFrame == null) {
+      return;
+    }
+
+    final frame = latestFrame;
+    final recoveredFromFailure = _streamStatus != _StreamStatus.streaming;
+    final previousStatus = _streamStatus;
+    if (mounted) {
+      setState(() {
+        _currentFrame = frame;
+        _lastFrameAt = DateTime.now();
+        // Successful frame: reset failure tracking.
+        if (_streamStatus != _StreamStatus.streaming) {
+          _streamStatus = _StreamStatus.streaming;
+          _consecutiveFailures = 0;
+          _errorMessage = null;
+        }
+      });
+    }
+    if (previousStatus != _StreamStatus.streaming) {
+      _lastStreamEvent = 'frame recovered';
+      _logInfo(
+        'stream',
+        'frame recovered | frame=${frame.length}B '
+            'buffer=${buffer.length}B reconnects=$_reconnectCount',
+      );
+    }
+    if (recoveredFromFailure && mounted) {
+      unawaited(
+        context.read<RoverControlCubit>().reapplyLedStateAfterReconnect(),
+      );
+      widget.onStreamHealthChanged?.call(true);
+    }
+    widget.onFrameAvailable?.call(frame);
+    _runDetectionIfNeeded(frame);
   }
 
   void _onStreamFailure(String message) {
@@ -258,6 +331,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
 
     _consecutiveFailures++;
     _reconnectCount++;
+    _lastStreamEvent = 'stream failure';
 
     final isOffline = _consecutiveFailures >= _offlineThreshold;
     setState(() {
@@ -270,6 +344,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
     } else {
       _scheduleReconnect();
     }
+    widget.onStreamHealthChanged?.call(false);
   }
 
   void _scheduleReconnect() {
@@ -279,6 +354,12 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
       milliseconds:
           _autoReconnectDelay.inMilliseconds *
           (1 + (_consecutiveFailures - 1).clamp(0, 4)),
+    );
+    _lastReconnectDelayMs = delay.inMilliseconds;
+    _logWarn(
+      'stream',
+      'reconnect scheduled in ${delay.inMilliseconds}ms '
+          '| failures=$_consecutiveFailures reconnects=$_reconnectCount',
     );
     _reconnectTimer = Timer(delay, () {
       if (mounted) _startStream();
@@ -295,20 +376,30 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
     }
     final lastFrameAt = _lastFrameAt;
     if (lastFrameAt == null) return;
+    final frameAge = DateTime.now().difference(lastFrameAt);
 
-    if (DateTime.now().difference(lastFrameAt) > _freezeThreshold) {
+    if (frameAge > _freezeThreshold) {
       if (mounted) {
         setState(() {
           _streamStatus = _StreamStatus.frozen;
           _errorMessage = 'Stream frozen — reconnecting...';
         });
       }
+      _lastStreamEvent = 'watchdog freeze';
+      _logWarn(
+        'stream',
+        'freeze detected | frameAge=${frameAge.inMilliseconds}ms '
+            'chunkAge=${_ageMs(_lastChunkAt)}ms chunk=${_lastChunkBytes}B '
+            'buffer=${_lastBufferBytes}B frame=${_lastFrameBytes}B',
+      );
+      widget.onStreamHealthChanged?.call(false);
       _startStream();
     }
   }
 
   void _resetAndRestart() {
     if (!mounted) return;
+    _logInfo('stream', 'manual reset');
     setState(() {
       _consecutiveFailures = 0;
       _streamStatus = _StreamStatus.connecting;
@@ -319,6 +410,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   }
 
   void _manualRetry() {
+    _logInfo('stream', 'manual retry');
     setState(() {
       _consecutiveFailures = 0;
       _streamStatus = _StreamStatus.connecting;
@@ -432,6 +524,32 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
 
   void _logError(String source, String message) =>
       debugPrint('[RoverStream][$source][ERROR] $message');
+
+  void _logInfo(String source, String message) =>
+      debugPrint('[RoverStream][$source][INFO] $message');
+
+  void _logWarn(String source, String message) =>
+      debugPrint('[RoverStream][$source][WARN] $message');
+
+  int _ageMs(DateTime? at) {
+    if (at == null) return -1;
+    return DateTime.now().difference(at).inMilliseconds;
+  }
+
+  String _streamStatusLabel(_StreamStatus status) {
+    switch (status) {
+      case _StreamStatus.connecting:
+        return 'connecting';
+      case _StreamStatus.streaming:
+        return 'streaming';
+      case _StreamStatus.frozen:
+        return 'frozen';
+      case _StreamStatus.error:
+        return 'error';
+      case _StreamStatus.offline:
+        return 'offline';
+    }
+  }
 
   String _friendlyDioError(DioException e) {
     switch (e.type) {
@@ -552,6 +670,14 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         orientedImage = transformedVisualLayer;
     }
 
+    final showTopStreamBanner =
+        _streamStatus == _StreamStatus.frozen ||
+        _streamStatus == _StreamStatus.error;
+    final topStreamBannerText = _streamStatus == _StreamStatus.frozen
+        ? 'Stream frozen — reconnecting...'
+        : 'Stream error — reconnecting...';
+    final diagnosticsTopOffset = showTopStreamBanner ? 42.0 : 8.0;
+
     return AspectRatio(
       aspectRatio: 4 / 3,
       child: Stack(
@@ -559,8 +685,8 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         children: [
           orientedImage,
 
-          // Frozen banner over the last good frame.
-          if (_streamStatus == _StreamStatus.frozen)
+          // Stream reconnect/error banner over the last good frame.
+          if (showTopStreamBanner)
             Positioned(
               top: 0,
               left: 0,
@@ -571,9 +697,9 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
                   vertical: 7,
                   horizontal: 12,
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       height: 13,
                       width: 13,
                       child: CircularProgressIndicator(
@@ -581,12 +707,38 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
                         color: Colors.white,
                       ),
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Text(
-                      'Stream frozen — reconnecting...',
-                      style: TextStyle(color: Colors.white, fontSize: 12),
+                      topStreamBannerText,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ],
+                ),
+              ),
+            ),
+
+          if (widget.showDiagnostics)
+            Positioned(
+              left: 8,
+              top: diagnosticsTopOffset,
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 250),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'Stream ${_streamStatusLabel(_streamStatus)} '
+                  'F:${_ageMs(_lastFrameAt)}ms '
+                  'C:${_ageMs(_lastChunkAt)}ms\n'
+                  'chunk:${_lastChunkBytes}B '
+                  'buf:${_lastBufferBytes}B '
+                  'frame:${_lastFrameBytes}B\n'
+                  'reconnect:${_reconnectCount} '
+                  'delay:${_lastReconnectDelayMs}ms\n'
+                  'event:${_lastStreamEvent}${_errorMessage == null ? '' : '\nerr:${_errorMessage!}'}',
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
                 ),
               ),
             ),
@@ -596,7 +748,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
               widget.showDiagnostics)
             Positioned(
               right: 8,
-              top: 8,
+              top: diagnosticsTopOffset,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(

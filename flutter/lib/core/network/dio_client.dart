@@ -11,6 +11,7 @@ class DioClient {
     _dio = Dio(
       BaseOptions(
         connectTimeout: AppConstants.httpConnectionTimeout,
+        sendTimeout: AppConstants.httpCommandTimeout,
         receiveTimeout: AppConstants.httpCommandTimeout,
       ),
     );

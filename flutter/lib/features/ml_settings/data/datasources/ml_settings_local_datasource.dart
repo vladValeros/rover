@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../autopilot/domain/entities/autopilot_settings.dart';
+import '../../../ml_motion_detection/domain/entities/motion_detection_settings.dart';
+import '../../../ml_motion_detection/domain/enums/motion_detection_action_mode.dart';
 import '../../../ml_motion_patterns/domain/entities/motion_pattern_definition.dart';
 import '../../../ml_motion_patterns/domain/entities/motion_pattern_settings.dart';
 import '../../../ml_object_detection/domain/entities/object_detection_settings.dart';
@@ -24,6 +27,19 @@ class MlSettingsLocalDatasource {
 
   // Legacy keys kept for migration fallback.
   static const String _mpPatternKeyLegacy = 'ml_mp_pattern';
+
+  static const String _apJsonKey = 'ml_ap_json';
+
+  static const String _mdEnabledKey = 'ml_md_enabled';
+  static const String _mdShowOverlayKey = 'ml_md_show_overlay';
+  static const String _mdShowDiagnosticsKey = 'ml_md_show_diagnostics';
+  static const String _mdSensitivityKey = 'ml_md_sensitivity';
+  static const String _mdSampleIntervalMsKey = 'ml_md_sample_interval_ms';
+  static const String _mdCooldownMsKey = 'ml_md_cooldown_ms';
+  static const String _mdActionModeKey = 'ml_md_action_mode';
+  static const String _mdRoutinePulseMsKey = 'ml_md_routine_pulse_ms';
+  static const String _mdRoutineCyclesKey = 'ml_md_routine_cycles';
+  static const String _mdLedOnDuringRoutineKey = 'ml_md_led_on_during_routine';
 
   Future<MlSettingsEntity> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -49,9 +65,35 @@ class MlSettingsLocalDatasource {
       turnMsPerDegree: prefs.getDouble(_mpTurnMsPerDegreeKey) ?? 5.6,
       interStepPauseMs: prefs.getInt(_mpInterStepPauseMsKey) ?? 120,
     );
+
+    final savedActionModeIndex = prefs.getInt(_mdActionModeKey);
+    final actionMode =
+        (savedActionModeIndex != null &&
+            savedActionModeIndex >= 0 &&
+            savedActionModeIndex < MotionDetectionActionMode.values.length)
+        ? MotionDetectionActionMode.values[savedActionModeIndex]
+        : MotionDetectionActionMode.routine;
+
+    final mdSettings = MotionDetectionSettings(
+      enabled: prefs.getBool(_mdEnabledKey) ?? false,
+      showOverlay: prefs.getBool(_mdShowOverlayKey) ?? true,
+      showDiagnostics: prefs.getBool(_mdShowDiagnosticsKey) ?? false,
+      sensitivity: _normalizeMotionSensitivity(
+        prefs.getDouble(_mdSensitivityKey),
+      ),
+      sampleIntervalMs: prefs.getInt(_mdSampleIntervalMsKey) ?? 350,
+      cooldownMs: prefs.getInt(_mdCooldownMsKey) ?? 2500,
+      actionMode: actionMode,
+      routinePulseMs: prefs.getInt(_mdRoutinePulseMsKey) ?? 140,
+      routineCycles: prefs.getInt(_mdRoutineCyclesKey) ?? 2,
+      ledOnDuringRoutine: prefs.getBool(_mdLedOnDuringRoutineKey) ?? true,
+    );
+
     return MlSettingsEntity(
       objectDetection: odSettings,
       motionPattern: mpSettings,
+      autopilot: _decodeAutopilot(prefs.getString(_apJsonKey)),
+      motionDetection: mdSettings,
     );
   }
 
@@ -73,6 +115,28 @@ class MlSettingsLocalDatasource {
     );
     await prefs.setDouble(_mpTurnMsPerDegreeKey, settings.turnMsPerDegree);
     await prefs.setInt(_mpInterStepPauseMsKey, settings.interStepPauseMs);
+  }
+
+  Future<void> saveAutopilot(AutopilotSettings settings) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_apJsonKey, jsonEncode(settings.toMap()));
+  }
+
+  Future<void> saveMotionDetection(MotionDetectionSettings settings) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_mdEnabledKey, settings.enabled);
+    await prefs.setBool(_mdShowOverlayKey, settings.showOverlay);
+    await prefs.setBool(_mdShowDiagnosticsKey, settings.showDiagnostics);
+    await prefs.setDouble(
+      _mdSensitivityKey,
+      _normalizeMotionSensitivity(settings.sensitivity),
+    );
+    await prefs.setInt(_mdSampleIntervalMsKey, settings.sampleIntervalMs);
+    await prefs.setInt(_mdCooldownMsKey, settings.cooldownMs);
+    await prefs.setInt(_mdActionModeKey, settings.actionMode.index);
+    await prefs.setInt(_mdRoutinePulseMsKey, settings.routinePulseMs);
+    await prefs.setInt(_mdRoutineCyclesKey, settings.routineCycles);
+    await prefs.setBool(_mdLedOnDuringRoutineKey, settings.ledOnDuringRoutine);
   }
 
   List<MotionPatternDefinition> _decodePatterns(String? jsonString) {
@@ -101,5 +165,26 @@ class MlSettingsLocalDatasource {
     const ids = ['box', 'figure_eight', 'l_pattern', 'shuttle'];
     if (legacyIndex < 0 || legacyIndex >= ids.length) return 'box';
     return ids[legacyIndex];
+  }
+
+  double _normalizeMotionSensitivity(double? raw) {
+    // New engineering range: 0.60..0.95 (higher = more sensitive).
+    // Legacy builds used 0.05..0.30, so remap old saved values forward.
+    if (raw == null) return 0.82;
+    final v = raw.clamp(0.0, 1.0);
+    if (v <= 0.35) {
+      final t = ((v - 0.05) / 0.25).clamp(0.0, 1.0);
+      return (0.60 + (0.35 * t)).clamp(0.60, 0.95);
+    }
+    return v.clamp(0.60, 0.95);
+  }
+
+  AutopilotSettings _decodeAutopilot(String? json) {
+    if (json == null || json.isEmpty) return const AutopilotSettings();
+    try {
+      final m = jsonDecode(json);
+      if (m is Map<String, dynamic>) return AutopilotSettings.fromMap(m);
+    } catch (_) {}
+    return const AutopilotSettings();
   }
 }

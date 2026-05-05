@@ -48,6 +48,35 @@ class _MotionPatternBody extends StatefulWidget {
 }
 
 class _MotionPatternBodyState extends State<_MotionPatternBody> {
+  late TextEditingController _nameController;
+  String _currentPatternId = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final selected = _selected(widget.settings);
+    _currentPatternId = selected.id;
+    _nameController = TextEditingController(text: selected.name);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MotionPatternBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final selected = _selected(widget.settings);
+    // Only reset the controller when the selected pattern changes,
+    // not when its name changes (that would dismiss the keyboard mid-type).
+    if (selected.id != _currentPatternId) {
+      _currentPatternId = selected.id;
+      _nameController.text = selected.name;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
   MotionPatternDefinition _selected(MotionPatternSettings s) {
     for (final p in s.patterns) {
       if (p.id == s.selectedPatternId) return p;
@@ -136,15 +165,12 @@ class _MotionPatternBodyState extends State<_MotionPatternBody> {
             ),
           ],
         ),
-        TextFormField(
-          key: ValueKey('pattern_name_${selected.id}_${selected.name}'),
-          initialValue: selected.name,
+        TextField(
+          controller: _nameController,
           decoration: const InputDecoration(labelText: 'Pattern Name'),
           onChanged: (v) {
-            _replaceSelected(
-              s,
-              selected.copyWith(name: v.trim().isEmpty ? selected.name : v),
-            );
+            if (v.trim().isEmpty) return;
+            _replaceSelected(s, selected.copyWith(name: v));
           },
         ),
         const SizedBox(height: 8),

@@ -17,6 +17,7 @@
 #include "img_converters.h"
 #include "camera_index.h"
 #include "Arduino.h"
+#include "SPIFFS.h"
 
 extern int gpLb;
 extern int gpLf;
@@ -289,8 +290,59 @@ static esp_err_t status_handler(httpd_req_t *req){
     return httpd_resp_send(req, json_response, strlen(json_response));
 }
 
+// Minimal fallback page served when SPIFFS/index.html is not found.
+// Replace by uploading from_arduino/web/index.html to SPIFFS root.
+static const char FALLBACK_PAGE[] =
+    "<!DOCTYPE html><html><head>"
+    "<meta charset=UTF-8>"
+    "<meta name=viewport content='width=device-width,initial-scale=1'>"
+    "<title>Rover Control</title>"
+    "<style>body{font-family:sans-serif;padding:16px;max-width:480px;margin:auto}"
+    ".btn{display:block;width:100%;padding:14px;margin:8px 0;border:none;border-radius:100px;"
+    "font-size:16px;cursor:pointer;} .drive{background:#E8DEF8} .stop{background:#FFCDD2}"
+    ".led{background:#FFF9C4;border:1px solid #F9A825}</style></head><body>"
+    "<h2>Rover Control</h2>"
+    "<p style='color:#79747E;font-size:13px'>"
+    "Full UI not found on SPIFFS. Upload <code>web/index.html</code> to flash filesystem.</p>"
+    "<hr>"
+    "<img id=s crossorigin=anonymous style='width:100%;border-radius:12px' src=''>"
+    "<script>document.getElementById('s').src='http://'+location.hostname+':81/stream';</script>"
+    "<button class='btn drive' onpointerdown=\"c('go')\"   onpointerup=\"c('stop')\">&#8593; Forward</button>"
+    "<div style='display:flex;gap:8px'>"
+    "<button class='btn drive' style='flex:1' onpointerdown=\"c('left')\"  onpointerup=\"c('stop')\">&#8592; Left</button>"
+    "<button class='btn stop'  style='flex:1' onpointerdown=\"c('stop')\">&#9632; Stop</button>"
+    "<button class='btn drive' style='flex:1' onpointerdown=\"c('right')\" onpointerup=\"c('stop')\">&#8594; Right</button>"
+    "</div>"
+    "<button class='btn drive' onpointerdown=\"c('back')\"  onpointerup=\"c('stop')\">&#8595; Backward</button>"
+    "<div style='display:flex;gap:8px'>"
+    "<button class='btn led' style='flex:1' onclick=\"c('ledon')\">&#128161; Light ON</button>"
+    "<button class='btn led' style='flex:1' onclick=\"c('ledoff')\">&#128161; Light OFF</button>"
+    "</div>"
+    "<script>function c(p){fetch('http://'+location.hostname+'/'+p+'?'+Date.now()).catch(()=>{});}</script>"
+    "</body></html>";
+
 static esp_err_t index_handler(httpd_req_t *req){
     httpd_resp_set_type(req, "text/html");
+
+    // ── Serve from SPIFFS when available ────────────────────────────────────
+    if (SPIFFS.exists("/index.html")) {
+        File f = SPIFFS.open("/index.html", "r");
+        if (f) {
+            uint8_t buf[512];
+            while (f.available()) {
+                int len = f.read(buf, sizeof(buf));
+                if (len > 0) httpd_resp_send_chunk(req, (const char*)buf, len);
+            }
+            f.close();
+            return httpd_resp_send_chunk(req, NULL, 0);
+        }
+    }
+
+    // ── Fallback: built-in minimal page ─────────────────────────────────────
+    return httpd_resp_send(req, FALLBACK_PAGE, strlen(FALLBACK_PAGE));
+
+    // ── Legacy inline page below is preserved as reference only ─────────────
+    // Delete from here to the closing brace if you want to slim the binary.
     String page = "";
 
     // Viewport + disable text selection

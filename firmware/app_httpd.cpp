@@ -50,6 +50,45 @@ static ra_filter_t ra_filter;
 httpd_handle_t stream_httpd = NULL;
 httpd_handle_t camera_httpd = NULL;
 
+enum MotionCommand {
+    CMD_STOP = 0,
+    CMD_GO = 1,
+    CMD_BACK = 2,
+    CMD_LEFT = 3,
+    CMD_RIGHT = 4,
+};
+
+static MotionCommand s_last_motion_cmd = CMD_STOP;
+static uint32_t s_last_motion_log_ms = 0;
+
+static inline esp_err_t send_ok(httpd_req_t *req){
+    // Keep command responses minimal to reduce socket/send work.
+    httpd_resp_set_type(req, "text/plain");
+    return httpd_resp_send(req, NULL, 0);
+}
+
+static inline void maybe_log_motion(const char *label){
+    // Serial I/O is blocking and can starve stream timing when drive commands
+    // are spammed while holding controls; throttle logs aggressively.
+    const uint32_t now = millis();
+    if (now - s_last_motion_log_ms >= 500) {
+        Serial.println(label);
+        s_last_motion_log_ms = now;
+    }
+}
+
+static inline esp_err_t apply_motion(httpd_req_t *req, MotionCommand cmd,
+                                     int nLf, int nLb, int nRf, int nRb,
+                                     const char *logLabel){
+    // Ignore duplicate command writes; clients may resend at high frequency.
+    if (cmd != s_last_motion_cmd) {
+        WheelAct(nLf, nLb, nRf, nRb);
+        s_last_motion_cmd = cmd;
+    }
+    maybe_log_motion(logLabel);
+    return send_ok(req);
+}
+
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
     memset(filter, 0, sizeof(ra_filter_t));
     filter->values = (int *)malloc(sample_size * sizeof(int));
@@ -666,38 +705,23 @@ static esp_err_t index_handler(httpd_req_t *req){
 }
 
 static esp_err_t go_handler(httpd_req_t *req){
-    WheelAct(HIGH, LOW, HIGH, LOW);
-    Serial.println("Go");
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, "OK", 2);
+    return apply_motion(req, CMD_GO, HIGH, LOW, HIGH, LOW, "Go");
 }
 
 static esp_err_t back_handler(httpd_req_t *req){
-    WheelAct(LOW, HIGH, LOW, HIGH);
-    Serial.println("Back");
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, "OK", 2);
+    return apply_motion(req, CMD_BACK, LOW, HIGH, LOW, HIGH, "Back");
 }
 
 static esp_err_t left_handler(httpd_req_t *req){
-    WheelAct(HIGH, LOW, LOW, HIGH);
-    Serial.println("Left");
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, "OK", 2);
+    return apply_motion(req, CMD_LEFT, HIGH, LOW, LOW, HIGH, "Left");
 }
 
 static esp_err_t right_handler(httpd_req_t *req){
-    WheelAct(LOW, HIGH, HIGH, LOW);
-    Serial.println("Right");
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, "OK", 2);
+    return apply_motion(req, CMD_RIGHT, LOW, HIGH, HIGH, LOW, "Right");
 }
 
 static esp_err_t stop_handler(httpd_req_t *req){
-    WheelAct(LOW, LOW, LOW, LOW);
-    Serial.println("Stop");
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, "OK", 2);
+    return apply_motion(req, CMD_STOP, LOW, LOW, LOW, LOW, "Stop");
 }
 
 static esp_err_t ledon_handler(httpd_req_t *req){

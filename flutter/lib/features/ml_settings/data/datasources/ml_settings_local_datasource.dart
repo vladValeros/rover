@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../autopilot/domain/entities/autopilot_settings.dart';
 import '../../../ml_motion_patterns/domain/entities/motion_pattern_definition.dart';
 import '../../../ml_motion_patterns/domain/entities/motion_pattern_settings.dart';
 import '../../../ml_object_detection/domain/entities/object_detection_settings.dart';
@@ -24,6 +25,8 @@ class MlSettingsLocalDatasource {
 
   // Legacy keys kept for migration fallback.
   static const String _mpPatternKeyLegacy = 'ml_mp_pattern';
+
+  static const String _apJsonKey = 'ml_ap_json';
 
   Future<MlSettingsEntity> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -52,6 +55,7 @@ class MlSettingsLocalDatasource {
     return MlSettingsEntity(
       objectDetection: odSettings,
       motionPattern: mpSettings,
+      autopilot: _decodeAutopilot(prefs.getString(_apJsonKey)),
     );
   }
 
@@ -73,6 +77,11 @@ class MlSettingsLocalDatasource {
     );
     await prefs.setDouble(_mpTurnMsPerDegreeKey, settings.turnMsPerDegree);
     await prefs.setInt(_mpInterStepPauseMsKey, settings.interStepPauseMs);
+  }
+
+  Future<void> saveAutopilot(AutopilotSettings settings) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_apJsonKey, jsonEncode(settings.toMap()));
   }
 
   List<MotionPatternDefinition> _decodePatterns(String? jsonString) {
@@ -101,5 +110,14 @@ class MlSettingsLocalDatasource {
     const ids = ['box', 'figure_eight', 'l_pattern', 'shuttle'];
     if (legacyIndex < 0 || legacyIndex >= ids.length) return 'box';
     return ids[legacyIndex];
+  }
+
+  AutopilotSettings _decodeAutopilot(String? json) {
+    if (json == null || json.isEmpty) return const AutopilotSettings();
+    try {
+      final m = jsonDecode(json);
+      if (m is Map<String, dynamic>) return AutopilotSettings.fromMap(m);
+    } catch (_) {}
+    return const AutopilotSettings();
   }
 }

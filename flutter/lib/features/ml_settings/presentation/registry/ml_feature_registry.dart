@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../../../autopilot/presentation/widgets/autopilot_settings_card.dart';
 import '../../../ml_motion_patterns/presentation/widgets/motion_pattern_settings_card.dart';
 import '../../../ml_object_detection/domain/enums/object_detection_mode.dart';
 import '../../../ml_object_detection/presentation/widgets/object_detection_settings_card.dart';
@@ -42,6 +43,12 @@ const List<MlFeatureRegistration> mlFeatureRegistry = [
     buildSettingsCard: MotionPatternSettingsCard.new,
     isActive: _isMotionPatternsActive,
   ),
+  MlFeatureRegistration(
+    id: 'autopilot',
+    title: 'Autopilot',
+    buildSettingsCard: AutopilotSettingsCard.new,
+    isActive: _isAutopilotActive,
+  ),
 ];
 
 bool _isObjectDetectionActive(MlSettingsEntity settings) =>
@@ -49,3 +56,6 @@ bool _isObjectDetectionActive(MlSettingsEntity settings) =>
 
 bool _isMotionPatternsActive(MlSettingsEntity settings) =>
     settings.motionPattern.enabled;
+
+bool _isAutopilotActive(MlSettingsEntity settings) =>
+    settings.autopilot.enabled;

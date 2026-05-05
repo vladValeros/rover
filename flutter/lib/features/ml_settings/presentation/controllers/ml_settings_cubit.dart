@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 
 import '../../../autopilot/domain/entities/autopilot_settings.dart';
+import '../../../ml_motion_detection/domain/entities/motion_detection_settings.dart';
 import '../../../ml_motion_patterns/domain/entities/motion_pattern_settings.dart';
 import '../../../ml_object_detection/domain/entities/object_detection_settings.dart';
 import '../../data/datasources/ml_settings_local_datasource.dart';
@@ -43,6 +44,11 @@ class MlSettingsCubit extends Cubit<MlSettingsState> {
     await _datasource.saveAutopilot(settings);
   }
 
-  // Future ML features can add their own update methods here, e.g.:
-  // Future<void> updateMotionDetection(MotionDetectionSettings settings) async { ... }
+  Future<void> updateMotionDetection(MotionDetectionSettings settings) async {
+    final current = state.whenOrNull(loaded: (s) => s);
+    if (current == null) return;
+    final updated = current.copyWith(motionDetection: settings);
+    emit(MlSettingsState.loaded(updated));
+    await _datasource.saveMotionDetection(settings);
+  }
 }

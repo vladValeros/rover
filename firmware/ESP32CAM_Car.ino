@@ -148,10 +148,6 @@ void setup() {
   // Set the actual streaming resolution (320×240 — small JPEG, low latency).
   sensor_t * s = esp_camera_sensor_get();
   s->set_framesize(s, FRAMESIZE_QVGA);
-
-  // Keep AP radio fully awake; power-save modes can add bursty latency that
-  // looks like periodic stream freezes under control traffic.
-  WiFi.setSleep(false);
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {

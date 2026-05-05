@@ -17,7 +17,6 @@
 #include "img_converters.h"
 #include "camera_index.h"
 #include "Arduino.h"
-#include "SPIFFS.h"
 
 extern int gpLb;
 extern int gpLf;
@@ -49,12 +48,6 @@ static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %
 static ra_filter_t ra_filter;
 httpd_handle_t stream_httpd = NULL;
 httpd_handle_t camera_httpd = NULL;
-
-// Set to 1 only when you intentionally want SPIFFS /index.html to override
-// the embedded firmware UI for local experimentation.
-#ifndef ENABLE_SPIFFS_INDEX_OVERRIDE
-#define ENABLE_SPIFFS_INDEX_OVERRIDE 0
-#endif
 
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
     memset(filter, 0, sizeof(ra_filter_t));
@@ -296,8 +289,7 @@ static esp_err_t status_handler(httpd_req_t *req){
     return httpd_resp_send(req, json_response, strlen(json_response));
 }
 
-// Minimal fallback page served when SPIFFS/index.html is not found.
-// Replace by uploading from_arduino/web/index.html to SPIFFS root.
+// Minimal fallback page if embedded index payload is unavailable.
 static const char FALLBACK_PAGE[] =
     "<!DOCTYPE html><html><head>"
     "<meta charset=UTF-8>"
@@ -309,7 +301,7 @@ static const char FALLBACK_PAGE[] =
     ".led{background:#FFF9C4;border:1px solid #F9A825}</style></head><body>"
     "<h2>Rover Control</h2>"
     "<p style='color:#79747E;font-size:13px'>"
-    "Full UI not found on SPIFFS. Upload <code>web/index.html</code> to flash filesystem.</p>"
+    "Embedded web UI payload unavailable. Using minimal fallback controls.</p>"
     "<hr>"
     "<img id=s crossorigin=anonymous style='width:100%;border-radius:12px' src=''>"
     "<script>document.getElementById('s').src='http://'+location.hostname+':81/stream';</script>"
@@ -329,24 +321,6 @@ static const char FALLBACK_PAGE[] =
 
 static esp_err_t index_handler(httpd_req_t *req){
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-
-#if ENABLE_SPIFFS_INDEX_OVERRIDE
-    if (SPIFFS.exists("/index.html")) {
-        httpd_resp_set_type(req, "text/html");
-        File f = SPIFFS.open("/index.html", "r");
-        if (f) {
-            uint8_t buf[512];
-            while (f.available()) {
-                int len = f.read(buf, sizeof(buf));
-                if (len > 0) {
-                    httpd_resp_send_chunk(req, (const char*)buf, len);
-                }
-            }
-            f.close();
-            return httpd_resp_send_chunk(req, NULL, 0);
-        }
-    }
-#endif
 
     // Primary delivery path: merged firmware UI from camera_index.h.
     httpd_resp_set_type(req, "text/html");
@@ -678,13 +652,7 @@ static esp_err_t capabilities_handler(httpd_req_t *req){
                 "{"
                 "\"version\":1,"
                 "\"fallback_ui\":{"
-                    "\"embedded_index_primary\":true,"
-                    "\"spiffs_override_enabled\":"
-#if ENABLE_SPIFFS_INDEX_OVERRIDE
-                    "true"
-#else
-                    "false"
-#endif
+                    "\"embedded_index_primary\":true"
                 "},"
                 "\"motion_detection\":{"
                     "\"supported\":true,"

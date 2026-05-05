@@ -11,17 +11,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed — File layout and docs split
 
 - Moved active UI source from `firmware/web/index.html` to `firmware/index.html` so it sits at the same level as firmware source files.
-- Kept SPIFFS runtime behavior unchanged (`/index.html` is still the served path on device).
+- Switched runtime web UI delivery to embedded payload (`camera_index.h`) served directly by firmware.
 - Extracted procedural flashing/upload instructions from firmware README into `docs/firmware/SETUP.md`.
 - Refocused `docs/firmware/README.md` to architecture and API reference only.
 
-### Added — Web UI separation (SPIFFS)
+### Added — Web UI separation
 
 **Branch:** `nekolaiv/web-sync`
 
 #### `web/index.html` (new file)
-- Created a standalone web UI stored on the SPIFFS filesystem, completely separate from the firmware binary.
-- Editing this file and re-uploading to SPIFFS does **not** require reflashing the firmware.
+- Created a standalone web UI source file, separated from C++ handler logic.
+- Editing this file requires regenerating `camera_index.h` and reflashing firmware.
 - **Layout and features mirror the Flutter mobile app:**
   - Live MJPEG stream rendered on a `<canvas>` element.
   - Camera orientation chips: Normal, Rotate 180, Rotate 180 + Mirror.
@@ -38,18 +38,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Snackbar notifications for model load status, preset applied, and connection events.
 
 #### `app_httpd.cpp`
-- Added `#include "SPIFFS.h"`.
-- Replaced the monolithic string-concatenated `index_handler` with a SPIFFS-first file server:
-  - Checks for `/index.html` on SPIFFS; streams it in 512-byte chunks if found.
-  - Falls back to a compact built-in minimal page (drive controls + stream) when SPIFFS file is absent.
+- Replaced the monolithic string-concatenated `index_handler` with embedded payload serving from `camera_index.h`.
+  - Falls back to a compact built-in minimal page (drive controls + stream) if payload is unavailable.
   - The legacy inline HTML is preserved in-source as a comment reference but is no longer executed.
 - All motor, LED, stream, camera, and status handlers are **unchanged**.
 
 #### `ESP32CAM_Car.ino`
-- Added `#include "SPIFFS.h"`.
-- Added `SPIFFS.begin(true)` in `setup()` before `startCameraServer()`.
-  - `true` = auto-format partition on first boot if filesystem is uninitialised.
-  - Prints a warning to Serial if mount fails; rover still boots and serves the fallback page.
+- No filesystem mount step required for UI serving.
 - No changes to Wi-Fi connection logic, camera init, GPIO pin assignments, or motor enable pins.
 
 ---

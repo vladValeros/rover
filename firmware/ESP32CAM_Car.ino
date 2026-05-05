@@ -3,7 +3,6 @@
 
 #include "esp_camera.h"
 #include <WiFi.h>
-#include "SPIFFS.h"
 
 //
 // WARNING!!! Make sure that you have either selected ESP32 Wrover Module,
@@ -152,13 +151,6 @@ void setup() {
   }
   Serial.println("");
   Serial.println("WiFi connected");
-
-  // Mount SPIFFS (format on first boot if needed)
-  if (!SPIFFS.begin(true)) {
-    Serial.println("SPIFFS mount failed — web UI will use embedded merged firmware index");
-  } else {
-    Serial.println("SPIFFS mounted (override available when enabled in firmware)");
-  }
 
   startCameraServer();
 

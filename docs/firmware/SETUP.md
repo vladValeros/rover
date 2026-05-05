@@ -15,9 +15,9 @@
 
 ## Decide what changed
 
-1. If you changed .ino or .cpp, do firmware upload.
-2. If you changed only index.html, do SPIFFS upload only.
-3. If you changed both, do firmware upload first, then SPIFFS upload.
+1. If you changed `.ino` or `.cpp`, do firmware upload.
+2. If you changed only `index.html`, regenerate `camera_index.h`, then do firmware upload.
+3. If you changed both firmware and web UI, regenerate `camera_index.h` first, then upload firmware once.
 
 ## Firmware upload (.ino/.cpp)
 
@@ -32,13 +32,12 @@
 9. Press RESET to boot normally.
 10. Check serial monitor for rover IP.
 
-## SPIFFS upload (index.html only)
+## Regenerate embedded web payload (index.html changes)
 
-1. Ensure data folder exists under sketch directory.
-2. Copy firmware/index.html into data/index.html.
-3. Run Upload LittleFS/SPIFFS from command palette.
-4. Wait until upload complete.
-5. Reboot board if page does not refresh immediately.
+1. Compress `firmware/index.html` to gzip.
+2. Convert gzip bytes into C array and update `firmware/camera_index.h`.
+3. Confirm `index_html_gz_len` matches the payload size.
+4. Upload firmware (`ESP32CAM_Car.ino`) normally.
 
 ## Fast verification
 
@@ -49,7 +48,7 @@
 
 ## Notes
 
-- Firmware does not auto-read from firmware/index.html on your PC.
-- Board only serves /index.html from SPIFFS partition.
-- If SPIFFS upload is skipped, board keeps previous UI.
-- If /index.html is missing on SPIFFS, fallback page is served.
+- Firmware does not auto-read `firmware/index.html` on your PC.
+- Board serves the web UI from embedded `camera_index.h` payload.
+- Changing `index.html` has no effect until `camera_index.h` is regenerated and firmware is reflashed.
+- If embedded payload is unavailable, fallback page is served.

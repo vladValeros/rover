@@ -21,10 +21,10 @@ Motor GPIO mapping:
 
 ## Source files
 
-- `firmware/ESP32CAM_Car.ino`: Entry point, Wi-Fi, camera init, SPIFFS mount, starts web/stream servers
+- `firmware/ESP32CAM_Car.ino`: Entry point, Wi-Fi, camera init, starts web/stream servers
 - `firmware/app_httpd.cpp`: HTTP handlers, control endpoints, stream endpoint
-- `firmware/camera_index.h`: Legacy inline web payload (reference only)
-- `firmware/index.html`: Active web UI source that is uploaded to SPIFFS as `/index.html`
+- `firmware/camera_index.h`: Embedded gzipped web payload served by firmware
+- `firmware/index.html`: Source used to regenerate `camera_index.h`
 
 ## Network model
 
@@ -47,11 +47,11 @@ Motor GPIO mapping:
 - `GET /control?var=...&val=...`: camera parameter update
 - `GET :81/stream`: MJPEG stream
 
-## SPIFFS separation
+## Embedded web UI delivery
 
-- UI changes do not require firmware reflashing
-- `index_handler` serves `/index.html` from SPIFFS when available
-- If `/index.html` is missing, firmware serves a minimal built-in fallback control page
+- Firmware serves the embedded web payload from `camera_index.h`
+- UI updates require regenerating `camera_index.h` and reflashing firmware
+- If embedded payload is unavailable, firmware serves a minimal built-in fallback control page
 
 ## Web UI scope
 

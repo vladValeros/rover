@@ -125,12 +125,16 @@ void setup() {
   config.pixel_format = PIXFORMAT_JPEG;
   //init with high specs to pre-allocate larger buffers
   if(psramFound()){
-    config.frame_size = FRAMESIZE_UXGA;
-    config.jpeg_quality = 10;
+    // Initialise with a moderate resolution so the sensor allocates buffers
+    // appropriately, then drop to QVGA for streaming.  Higher jpeg_quality
+    // numbers = lower quality = smaller files = less time blocking in
+    // httpd_resp_send_chunk = higher frame rate.
+    config.frame_size = FRAMESIZE_VGA;
+    config.jpeg_quality = 20;
     config.fb_count = 2;
   } else {
-    config.frame_size = FRAMESIZE_SVGA;
-    config.jpeg_quality = 12;
+    config.frame_size = FRAMESIZE_QVGA;
+    config.jpeg_quality = 20;
     config.fb_count = 1;
   }
 
@@ -141,9 +145,9 @@ void setup() {
     return;
   }
 
-  //drop down frame size for higher initial frame rate
+  // Set the actual streaming resolution (320×240 — small JPEG, low latency).
   sensor_t * s = esp_camera_sensor_get();
-  s->set_framesize(s, FRAMESIZE_CIF);
+  s->set_framesize(s, FRAMESIZE_QVGA);
 
   WiFi.begin(ssid, password);
 

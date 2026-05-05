@@ -134,20 +134,33 @@ static esp_err_t stream_handler(httpd_req_t *req){
     while(true){
         fb = esp_camera_fb_get();
         if (!fb) {
-            Serial.printf("Camera capture failed");
+            Serial.printf("Camera capture failed\n");
             res = ESP_FAIL;
         } else {
             if(fb->format != PIXFORMAT_JPEG){
+                // frame2jpg allocates _jpg_buf; fb can be returned immediately.
                 bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
                 esp_camera_fb_return(fb);
                 fb = NULL;
                 if(!jpeg_converted){
-                    Serial.printf("JPEG compression failed");
+                    Serial.printf("JPEG compression failed\n");
                     res = ESP_FAIL;
                 }
             } else {
+                // Copy JPEG data into a separate buffer so we can return the
+                // camera frame buffer immediately.  This lets the camera start
+                // capturing the next frame in parallel while WiFi is sending
+                // the current one, which is the primary cause of low frame rate.
                 _jpg_buf_len = fb->len;
-                _jpg_buf = fb->buf;
+                _jpg_buf = (uint8_t*)malloc(_jpg_buf_len);
+                if(_jpg_buf){
+                    memcpy(_jpg_buf, fb->buf, _jpg_buf_len);
+                } else {
+                    Serial.printf("malloc failed for JPEG copy (%u B)\n", (unsigned)_jpg_buf_len);
+                    res = ESP_FAIL;
+                }
+                esp_camera_fb_return(fb);
+                fb = NULL;
             }
         }
         if(res == ESP_OK){
@@ -160,11 +173,9 @@ static esp_err_t stream_handler(httpd_req_t *req){
         if(res == ESP_OK){
             res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
         }
-        if(fb){
-            esp_camera_fb_return(fb);
-            fb = NULL;
-            _jpg_buf = NULL;
-        } else if(_jpg_buf){
+        // fb is always NULL here; _jpg_buf was either malloc'd (JPEG path) or
+        // allocated by frame2jpg (non-JPEG path) — free it in both cases.
+        if(_jpg_buf){
             free(_jpg_buf);
             _jpg_buf = NULL;
         }
@@ -176,7 +187,7 @@ static esp_err_t stream_handler(httpd_req_t *req){
         last_frame = fr_end;
         frame_time /= 1000;
         uint32_t avg_frame_time = ra_filter_run(&ra_filter, frame_time);
-        Serial.printf("MJPG: %uB %ums (%.1ffps), AVG: %ums (%.1ffps)",
+        Serial.printf("MJPG: %uB %ums (%.1ffps), AVG: %ums (%.1ffps)\n",
             (uint32_t)(_jpg_buf_len),
             (uint32_t)frame_time, 1000.0 / (uint32_t)frame_time,
             avg_frame_time, 1000.0 / avg_frame_time

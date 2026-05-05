@@ -50,6 +50,12 @@ static ra_filter_t ra_filter;
 httpd_handle_t stream_httpd = NULL;
 httpd_handle_t camera_httpd = NULL;
 
+// Set to 1 only when you intentionally want SPIFFS /index.html to override
+// the embedded firmware UI for local experimentation.
+#ifndef ENABLE_SPIFFS_INDEX_OVERRIDE
+#define ENABLE_SPIFFS_INDEX_OVERRIDE 0
+#endif
+
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
     memset(filter, 0, sizeof(ra_filter_t));
     filter->values = (int *)malloc(sample_size * sizeof(int));
@@ -322,23 +328,35 @@ static const char FALLBACK_PAGE[] =
     "</body></html>";
 
 static esp_err_t index_handler(httpd_req_t *req){
-    httpd_resp_set_type(req, "text/html");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 
-    // ── Serve from SPIFFS when available ────────────────────────────────────
+#if ENABLE_SPIFFS_INDEX_OVERRIDE
     if (SPIFFS.exists("/index.html")) {
+        httpd_resp_set_type(req, "text/html");
         File f = SPIFFS.open("/index.html", "r");
         if (f) {
             uint8_t buf[512];
             while (f.available()) {
                 int len = f.read(buf, sizeof(buf));
-                if (len > 0) httpd_resp_send_chunk(req, (const char*)buf, len);
+                if (len > 0) {
+                    httpd_resp_send_chunk(req, (const char*)buf, len);
+                }
             }
             f.close();
             return httpd_resp_send_chunk(req, NULL, 0);
         }
     }
+#endif
 
-    // ── Fallback: built-in minimal page ─────────────────────────────────────
+    // Primary delivery path: merged firmware UI from camera_index.h.
+    httpd_resp_set_type(req, "text/html");
+    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    if (index_html_gz_len > 0) {
+        return httpd_resp_send(req, (const char*)index_html_gz, index_html_gz_len);
+    }
+
+    // Safety fallback if embedded artifact is unexpectedly unavailable.
     return httpd_resp_send(req, FALLBACK_PAGE, strlen(FALLBACK_PAGE));
 
     // ── Legacy inline page below is preserved as reference only ─────────────
@@ -654,6 +672,41 @@ static esp_err_t index_handler(httpd_req_t *req){
     return httpd_resp_send(req, &page[0], strlen(&page[0]));
 }
 
+static esp_err_t capabilities_handler(httpd_req_t *req){
+        // Keep this endpoint aligned with fallback feature support for parity checks.
+        static const char* json =
+                "{"
+                "\"version\":1,"
+                "\"fallback_ui\":{"
+                    "\"embedded_index_primary\":true,"
+                    "\"spiffs_override_enabled\":"
+#if ENABLE_SPIFFS_INDEX_OVERRIDE
+                    "true"
+#else
+                    "false"
+#endif
+                "},"
+                "\"motion_detection\":{"
+                    "\"supported\":true,"
+                    "\"action_modes\":["
+                        "\"overlay_only\","
+                        "\"routine_only\","
+                        "\"snapshot_only\","
+                        "\"light_and_snapshot\""
+                    "],"
+                    "\"light_snapshot_ms\":2500"
+                "},"
+                "\"command_endpoints\":["
+                    "\"/go\",\"/back\",\"/left\",\"/right\",\"/stop\","
+                    "\"/ledon\",\"/ledoff\",\"/status\",\"/control\",\"/capture\",\"/stream\""
+                "]"
+                "}";
+
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+        return httpd_resp_send(req, json, strlen(json));
+}
+
 static esp_err_t go_handler(httpd_req_t *req){
     WheelAct(HIGH, LOW, HIGH, LOW);
     Serial.println("Go");
@@ -769,6 +822,13 @@ void startCameraServer(){
         .user_ctx  = NULL
     };
 
+    httpd_uri_t capabilities_uri = {
+        .uri       = "/capabilities",
+        .method    = HTTP_GET,
+        .handler   = capabilities_handler,
+        .user_ctx  = NULL
+    };
+
     httpd_uri_t cmd_uri = {
         .uri       = "/control",
         .method    = HTTP_GET,
@@ -804,6 +864,7 @@ void startCameraServer(){
         // FIX Bug 3: these were defined but never registered
         httpd_register_uri_handler(camera_httpd, &capture_uri);
         httpd_register_uri_handler(camera_httpd, &status_uri);
+        httpd_register_uri_handler(camera_httpd, &capabilities_uri);
         httpd_register_uri_handler(camera_httpd, &cmd_uri);
     }
 

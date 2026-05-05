@@ -155,9 +155,9 @@ void setup() {
 
   // Mount SPIFFS (format on first boot if needed)
   if (!SPIFFS.begin(true)) {
-    Serial.println("SPIFFS mount failed — web UI will use built-in fallback page");
+    Serial.println("SPIFFS mount failed — web UI will use embedded merged firmware index");
   } else {
-    Serial.println("SPIFFS mounted");
+    Serial.println("SPIFFS mounted (override available when enabled in firmware)");
   }
 
   startCameraServer();

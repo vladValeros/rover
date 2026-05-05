@@ -50,6 +50,39 @@ static ra_filter_t ra_filter;
 httpd_handle_t stream_httpd = NULL;
 httpd_handle_t camera_httpd = NULL;
 
+static const framesize_t kStreamNormalFrameSize = FRAMESIZE_QVGA;
+static const int kStreamNormalJpegQuality = 20;
+static const framesize_t kStreamMotionFrameSize = FRAMESIZE_HQVGA;
+static const int kStreamMotionJpegQuality = 28;
+static bool s_motion_stream_profile_active = false;
+
+static inline void set_motion_stream_profile(bool moving){
+    if (s_motion_stream_profile_active == moving) {
+        return;
+    }
+
+    sensor_t * s = esp_camera_sensor_get();
+    if (!s) {
+        return;
+    }
+
+    if (moving) {
+        s->set_framesize(s, kStreamMotionFrameSize);
+        s->set_quality(s, kStreamMotionJpegQuality);
+    } else {
+        s->set_framesize(s, kStreamNormalFrameSize);
+        s->set_quality(s, kStreamNormalJpegQuality);
+    }
+
+    s_motion_stream_profile_active = moving;
+    Serial.printf(
+        "Stream profile -> %s (framesize=%d quality=%d)\n",
+        moving ? "motion" : "normal",
+        (int)(moving ? kStreamMotionFrameSize : kStreamNormalFrameSize),
+        moving ? kStreamMotionJpegQuality : kStreamNormalJpegQuality
+    );
+}
+
 static ra_filter_t * ra_filter_init(ra_filter_t * filter, size_t sample_size){
     memset(filter, 0, sizeof(ra_filter_t));
     filter->values = (int *)malloc(sample_size * sizeof(int));
@@ -123,6 +156,7 @@ static esp_err_t stream_handler(httpd_req_t *req){
     uint8_t * _jpg_buf = NULL;
     char * part_buf[64];
     static int64_t last_frame = 0;
+    static uint32_t last_mjpg_log_ms = 0;
     if(!last_frame) {
         last_frame = esp_timer_get_time();
     }
@@ -187,11 +221,18 @@ static esp_err_t stream_handler(httpd_req_t *req){
         last_frame = fr_end;
         frame_time /= 1000;
         uint32_t avg_frame_time = ra_filter_run(&ra_filter, frame_time);
-        Serial.printf("MJPG: %uB %ums (%.1ffps), AVG: %ums (%.1ffps)\n",
-            (uint32_t)(_jpg_buf_len),
-            (uint32_t)frame_time, 1000.0 / (uint32_t)frame_time,
-            avg_frame_time, 1000.0 / avg_frame_time
-        );
+        const uint32_t now_ms = millis();
+        if (now_ms - last_mjpg_log_ms >= 1000) {
+            Serial.printf("MJPG: %uB %ums (%.1ffps), AVG: %ums (%.1ffps)\n",
+                (uint32_t)(_jpg_buf_len),
+                (uint32_t)frame_time, 1000.0 / (uint32_t)frame_time,
+                avg_frame_time, 1000.0 / avg_frame_time
+            );
+            last_mjpg_log_ms = now_ms;
+        }
+
+        // Let other tasks (notably command handlers) run between frames.
+        delay(1);
     }
     last_frame = 0;
     return res;
@@ -666,6 +707,7 @@ static esp_err_t index_handler(httpd_req_t *req){
 }
 
 static esp_err_t go_handler(httpd_req_t *req){
+    set_motion_stream_profile(true);
     WheelAct(HIGH, LOW, HIGH, LOW);
     Serial.println("Go");
     httpd_resp_set_type(req, "text/html");
@@ -673,6 +715,7 @@ static esp_err_t go_handler(httpd_req_t *req){
 }
 
 static esp_err_t back_handler(httpd_req_t *req){
+    set_motion_stream_profile(true);
     WheelAct(LOW, HIGH, LOW, HIGH);
     Serial.println("Back");
     httpd_resp_set_type(req, "text/html");
@@ -680,6 +723,7 @@ static esp_err_t back_handler(httpd_req_t *req){
 }
 
 static esp_err_t left_handler(httpd_req_t *req){
+    set_motion_stream_profile(true);
     WheelAct(HIGH, LOW, LOW, HIGH);
     Serial.println("Left");
     httpd_resp_set_type(req, "text/html");
@@ -687,6 +731,7 @@ static esp_err_t left_handler(httpd_req_t *req){
 }
 
 static esp_err_t right_handler(httpd_req_t *req){
+    set_motion_stream_profile(true);
     WheelAct(LOW, HIGH, HIGH, LOW);
     Serial.println("Right");
     httpd_resp_set_type(req, "text/html");
@@ -694,6 +739,7 @@ static esp_err_t right_handler(httpd_req_t *req){
 }
 
 static esp_err_t stop_handler(httpd_req_t *req){
+    set_motion_stream_profile(false);
     WheelAct(LOW, LOW, LOW, LOW);
     Serial.println("Stop");
     httpd_resp_set_type(req, "text/html");
@@ -820,6 +866,11 @@ void startCameraServer(){
 
     config.server_port += 1;
     config.ctrl_port += 1;
+    // Stream server should be slightly lower priority than command server
+    // so drive commands remain responsive under network load.
+    if (config.task_priority > 1) {
+        config.task_priority -= 1;
+    }
     Serial.printf("Starting stream server on port: '%d'", config.server_port);
     if (httpd_start(&stream_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(stream_httpd, &stream_uri);

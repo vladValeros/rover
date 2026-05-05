@@ -163,9 +163,12 @@ class _ObjectDetectionBodyState extends State<_ObjectDetectionBody> {
         const SizedBox(height: 8),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text('Diagnostics Overlay', style: textTheme.labelLarge),
+          title: Text(
+            'Realtime Stream Logs Overlay',
+            style: textTheme.labelLarge,
+          ),
           subtitle: const Text(
-            'Shows latency, FPS and frame counters on stream',
+            'Show or hide the on-screen stream status/log panel.',
           ),
           value: s.showDiagnostics,
           onChanged: (v) => widget.cubit.updateObjectDetection(

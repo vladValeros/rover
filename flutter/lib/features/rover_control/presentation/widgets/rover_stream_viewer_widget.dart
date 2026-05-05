@@ -670,6 +670,14 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         orientedImage = transformedVisualLayer;
     }
 
+    final showTopStreamBanner =
+        _streamStatus == _StreamStatus.frozen ||
+        _streamStatus == _StreamStatus.error;
+    final topStreamBannerText = _streamStatus == _StreamStatus.frozen
+        ? 'Stream frozen — reconnecting...'
+        : 'Stream error — reconnecting...';
+    final diagnosticsTopOffset = showTopStreamBanner ? 42.0 : 8.0;
+
     return AspectRatio(
       aspectRatio: 4 / 3,
       child: Stack(
@@ -677,8 +685,8 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
         children: [
           orientedImage,
 
-          // Frozen banner over the last good frame.
-          if (_streamStatus == _StreamStatus.frozen)
+          // Stream reconnect/error banner over the last good frame.
+          if (showTopStreamBanner)
             Positioned(
               top: 0,
               left: 0,
@@ -689,9 +697,9 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
                   vertical: 7,
                   horizontal: 12,
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       height: 13,
                       width: 13,
                       child: CircularProgressIndicator(
@@ -699,10 +707,10 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
                         color: Colors.white,
                       ),
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Text(
-                      'Stream frozen — reconnecting...',
-                      style: TextStyle(color: Colors.white, fontSize: 12),
+                      topStreamBannerText,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ],
                 ),
@@ -712,7 +720,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
           if (widget.showDiagnostics)
             Positioned(
               left: 8,
-              top: 8,
+              top: diagnosticsTopOffset,
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 250),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -740,7 +748,7 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
               widget.showDiagnostics)
             Positioned(
               right: 8,
-              top: 8,
+              top: diagnosticsTopOffset,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(

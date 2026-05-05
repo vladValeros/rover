@@ -1,4 +1,4 @@
-# Changelog — from_arduino
+# Changelog — firmware
 
 All notable changes to the ESP32-CAM firmware and web UI are documented here.
 
@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ---
 
 ## [Unreleased]
+
+### Changed — File layout and docs split
+
+- Moved active UI source from `firmware/web/index.html` to `firmware/index.html` so it sits at the same level as firmware source files.
+- Kept SPIFFS runtime behavior unchanged (`/index.html` is still the served path on device).
+- Extracted procedural flashing/upload instructions from firmware README into `docs/firmware/SETUP.md`.
+- Refocused `docs/firmware/README.md` to architecture and API reference only.
 
 ### Added — Web UI separation (SPIFFS)
 

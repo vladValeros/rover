@@ -136,16 +136,6 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                   final mlSettings = mlState.whenOrNull(loaded: (s) => s);
                   final od = mlSettings?.objectDetection;
                   final mpSettings = mlSettings?.motionPattern;
-                  final apSettings = mlSettings?.autopilot;
-
-                  // Keep the autopilot cubit in sync with persisted settings.
-                  if (apSettings != null) {
-                    _autopilotCubit.updateSettings(apSettings);
-                    // If the feature was just disabled, stop any running loop.
-                    if (!apSettings.enabled) {
-                      _autopilotCubit.stop();
-                    }
-                  }
 
                   if (widget.isPreviewMode) {
                     return LayoutBuilder(
@@ -192,8 +182,8 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                                 od?.confidenceThreshold ?? 0.45,
                             detectionIntervalMs: od?.intervalMs ?? 800,
                             showDiagnostics: od?.showDiagnostics ?? true,
-                            onFrameAvailable: _autopilotCubit.updateFrame,
-                            onStreamHealthChanged: _handleStreamHealthChanged,
+                            onFrameAvailable: null,
+                            onStreamHealthChanged: null,
                             onMlUnavailable: (message) {
                               final cubit = context.read<MlSettingsCubit>();
                               final current = cubit.state.whenOrNull(
@@ -213,16 +203,9 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                             refreshNonce: _streamRefreshNonce,
                             onRoverOffline: () => _showOfflineSheet(context),
                           ),
-                          if (apSettings?.enabled == true)
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                child: _buildAutopilotStreamOverlay(),
-                              ),
-                            ),
                         ],
                       ),
                       const SizedBox(height: 10),
-                      if (apSettings?.enabled == true) _buildAutopilotBar(),
                       _buildMotionPatternSection(mpSettings),
                       const SizedBox(height: 12),
                       const LedControlWidget(),
@@ -270,10 +253,9 @@ class _RoverControlScreenState extends State<RoverControlScreen>
 
   void _handleStreamHealthChanged(bool healthy) {
     _autopilotCubit.notifyStreamHealth(healthy);
+    // Do not force-stop motion patterns on transient stream freezes.
+    // Pattern control should only stop on manual override or confirmed offline.
     if (healthy) return;
-
-    _stopMotionPatternDirect(sendStopCommand: true);
-    unawaited(_roverCubit.sendCommand(RoverCommand.stop));
   }
 
   void _onManualControlOverride() {

@@ -97,7 +97,7 @@ class RoverStreamViewerWidget extends StatefulWidget {
 
 class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   static const Duration _watchdogInterval = Duration(seconds: 2);
-  static const Duration _freezeThreshold = Duration(seconds: 6);
+  static const Duration _freezeThreshold = Duration(seconds: 10);
   static const Duration _autoReconnectDelay = Duration(seconds: 1);
   static const Duration _streamConnectTimeout = Duration(seconds: 20);
 
@@ -255,53 +255,74 @@ class _RoverStreamViewerWidgetState extends State<RoverStreamViewerWidget> {
   }
 
   void _extractFrames(List<int> buffer) {
-    int startIndex = -1;
+    // Drain all complete JPEG frames currently available in buffer and render
+    // only the newest one. This avoids lag accumulation when multiple frames
+    // arrive in a burst after chunk gaps.
+    Uint8List? latestFrame;
+    while (true) {
+      int startIndex = -1;
+      int endIndex = -1;
 
-    for (int i = 0; i < buffer.length - 1; i++) {
-      if (buffer[i] == 0xFF && buffer[i + 1] == 0xD8) {
-        startIndex = i;
+      for (int i = 0; i < buffer.length - 1; i++) {
+        if (buffer[i] == 0xFF && buffer[i + 1] == 0xD8) {
+          startIndex = i;
+        }
+        if (startIndex != -1 &&
+            buffer[i] == 0xFF &&
+            buffer[i + 1] == 0xD9 &&
+            i > startIndex) {
+          endIndex = i + 1;
+          break;
+        }
       }
-      if (startIndex != -1 &&
-          buffer[i] == 0xFF &&
-          buffer[i + 1] == 0xD9 &&
-          i > startIndex) {
-        final frame = Uint8List.fromList(buffer.sublist(startIndex, i + 2));
-        buffer.removeRange(0, i + 2);
-        _lastBufferBytes = buffer.length;
-        _lastFrameBytes = frame.length;
-        final recoveredFromFailure = _streamStatus != _StreamStatus.streaming;
-        final previousStatus = _streamStatus;
-        if (mounted) {
-          setState(() {
-            _currentFrame = frame;
-            _lastFrameAt = DateTime.now();
-            // Successful frame: reset failure tracking.
-            if (_streamStatus != _StreamStatus.streaming) {
-              _streamStatus = _StreamStatus.streaming;
-              _consecutiveFailures = 0;
-              _errorMessage = null;
-            }
-          });
-        }
-        if (previousStatus != _StreamStatus.streaming) {
-          _lastStreamEvent = 'frame recovered';
-          _logInfo(
-            'stream',
-            'frame recovered | frame=${frame.length}B '
-                'buffer=${buffer.length}B reconnects=$_reconnectCount',
-          );
-        }
-        if (recoveredFromFailure && mounted) {
-          unawaited(
-            context.read<RoverControlCubit>().reapplyLedStateAfterReconnect(),
-          );
-          widget.onStreamHealthChanged?.call(true);
-        }
-        widget.onFrameAvailable?.call(frame);
-        _runDetectionIfNeeded(frame);
-        return;
+
+      if (startIndex == -1 || endIndex == -1) {
+        break;
       }
+
+      latestFrame = Uint8List.fromList(
+        buffer.sublist(startIndex, endIndex + 1),
+      );
+      buffer.removeRange(0, endIndex + 1);
+      _lastBufferBytes = buffer.length;
+      _lastFrameBytes = latestFrame.length;
     }
+
+    if (latestFrame == null) {
+      return;
+    }
+
+    final frame = latestFrame;
+    final recoveredFromFailure = _streamStatus != _StreamStatus.streaming;
+    final previousStatus = _streamStatus;
+    if (mounted) {
+      setState(() {
+        _currentFrame = frame;
+        _lastFrameAt = DateTime.now();
+        // Successful frame: reset failure tracking.
+        if (_streamStatus != _StreamStatus.streaming) {
+          _streamStatus = _StreamStatus.streaming;
+          _consecutiveFailures = 0;
+          _errorMessage = null;
+        }
+      });
+    }
+    if (previousStatus != _StreamStatus.streaming) {
+      _lastStreamEvent = 'frame recovered';
+      _logInfo(
+        'stream',
+        'frame recovered | frame=${frame.length}B '
+            'buffer=${buffer.length}B reconnects=$_reconnectCount',
+      );
+    }
+    if (recoveredFromFailure && mounted) {
+      unawaited(
+        context.read<RoverControlCubit>().reapplyLedStateAfterReconnect(),
+      );
+      widget.onStreamHealthChanged?.call(true);
+    }
+    widget.onFrameAvailable?.call(frame);
+    _runDetectionIfNeeded(frame);
   }
 
   void _onStreamFailure(String message) {

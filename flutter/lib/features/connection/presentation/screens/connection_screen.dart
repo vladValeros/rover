@@ -211,6 +211,30 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                                 )
                               : const Text('Connect'),
                         ),
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                          onPressed: isBusy
+                              ? null
+                              : () {
+                                  final ip = _ipController.text.trim();
+                                  locator<DioClient>().updateBaseUrl(ip);
+                                  context.go(RoverControlRoutes.path);
+                                },
+                          icon: const Icon(Icons.developer_mode_outlined),
+                          label: const Text('Open Controller (Offline)'),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Use this for UI testing without rover connection. '
+                          'Stream and controls will show connection errors gracefully.',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withAlpha(180),
+                              ),
+                          textAlign: TextAlign.center,
+                        ),
                       ],
                     );
                   },

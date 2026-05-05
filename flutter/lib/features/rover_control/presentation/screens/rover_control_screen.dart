@@ -79,13 +79,14 @@ class _RoverControlScreenState extends State<RoverControlScreen>
         listener: (context, state) {
           state.whenOrNull(
             failure: (message) {
-              ScaffoldMessenger.of(context).showSnackBar(
+              final messenger = ScaffoldMessenger.of(context);
+              messenger.clearSnackBars();
+              messenger.showSnackBar(
                 SnackBar(
                   content: Text(message),
                   action: SnackBarAction(
                     label: 'Dismiss',
-                    onPressed: () =>
-                        ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+                    onPressed: messenger.clearSnackBars,
                   ),
                 ),
               );

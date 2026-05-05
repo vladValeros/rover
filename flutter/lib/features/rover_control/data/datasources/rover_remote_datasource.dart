@@ -23,13 +23,43 @@ class RoverRemoteDatasource {
     );
 
     try {
-      await _dioClient.dio.get(command.path);
+      await _sendCommandRequest(command.path);
       developer.log(
         'Command success: ${command.name} in ${watch.elapsedMilliseconds}ms',
         name: 'RoverCommand',
       );
       return null;
     } on DioException catch (e) {
+      if (_isTransient(e)) {
+        developer.log(
+          'Transient failure for ${command.name}; retrying once...',
+          name: 'RoverCommand',
+        );
+        try {
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+          await _sendCommandRequest(command.path);
+          developer.log(
+            'Command success after retry: ${command.name} '
+            'in ${watch.elapsedMilliseconds}ms',
+            name: 'RoverCommand',
+          );
+          return null;
+        } on DioException catch (retryError) {
+          developer.log(
+            'Retry failed: ${command.name} '
+            'type=${retryError.type.name} '
+            'status=${retryError.response?.statusCode} '
+            'elapsed=${watch.elapsedMilliseconds}ms '
+            'message=${retryError.message}',
+            name: 'RoverCommand',
+            error: retryError,
+            stackTrace: retryError.stackTrace,
+          );
+          return NetworkFailure(
+            _friendlyDioError(retryError, command, watch.elapsedMilliseconds),
+          );
+        }
+      }
       developer.log(
         'Command DioException: ${command.name} '
         'type=${e.type.name} '
@@ -54,6 +84,23 @@ class RoverRemoteDatasource {
       );
       return NetworkFailure('Unexpected error: $e');
     }
+  }
+
+  Future<void> _sendCommandRequest(String path) {
+    return _dioClient.dio.get(
+      path,
+      options: Options(
+        sendTimeout: _dioClient.dio.options.sendTimeout,
+        receiveTimeout: _dioClient.dio.options.receiveTimeout,
+      ),
+    );
+  }
+
+  bool _isTransient(DioException e) {
+    return e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.connectionError;
   }
 
   String _friendlyDioError(

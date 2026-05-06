@@ -538,37 +538,63 @@ static esp_err_t index_handler(httpd_req_t *req){
     // guard conditions (faceOn && faceModel) prevent any model calls until ready.
     page += "renderFrame();";
 
-    // FIX Bug 1 (defer timing): blazeface and cocoSsd globals are only available
-    // after the deferred CDN scripts execute. The window 'load' event fires after
-    // ALL deferred scripts have run, so model loading is safe here.
-    // This replaces the previous direct blazeface.load() / cocoSsd.load() calls
-    // which ran before the deferred scripts were ready and caused ReferenceErrors.
+    // Robust model loader: never leave UI stuck on Loading if CDN/global init fails.
     page += "window.addEventListener('load', function() {";
+    page += "  var faceBtn = document.getElementById('faceBtn');";
+    page += "  var objBtn  = document.getElementById('objBtn');";
+    page += "  function markFaceUnavailable(msg){ faceBtn.disabled = true; faceBtn.style.backgroundColor='lightgrey'; faceBtn.innerHTML = '<b>' + msg + '</b>'; }";
+    page += "  function markObjUnavailable(msg){ objBtn.disabled = true; objBtn.style.backgroundColor='lightgrey'; objBtn.innerHTML = '<b>' + msg + '</b>'; }";
 
-    page += "  blazeface.load()";
-    page += "    .then(function(m) {";
-    page += "      faceModel = m;";
-    page += "      var b = document.getElementById('faceBtn');";
-    page += "      b.disabled = false; b.style.backgroundColor='lightgrey';";
-    page += "      b.innerHTML = '<b>Faces: OFF</b>';";
-    page += "    })";
-    page += "    .catch(function(e) {";
-    page += "      document.getElementById('faceBtn').innerHTML='<b>Face: No Internet</b>';";
-    page += "      console.error('BlazeFace load failed:', e);";
-    page += "    });";
+    page += "  function loadFaceModel() {";
+    page += "    try {";
+    page += "      if (typeof blazeface === 'undefined' || !blazeface.load) {";
+    page += "        markFaceUnavailable('Face: Unavailable');";
+    page += "        return;";
+    page += "      }";
+    page += "      blazeface.load()";
+    page += "        .then(function(m) {";
+    page += "          faceModel = m;";
+    page += "          faceBtn.disabled = false;";
+    page += "          faceBtn.style.backgroundColor = 'lightgrey';";
+    page += "          faceBtn.innerHTML = '<b>Faces: OFF</b>';";
+    page += "        })";
+    page += "        .catch(function(e) {";
+    page += "          markFaceUnavailable('Face: No Internet');";
+    page += "          console.error('BlazeFace load failed:', e);";
+    page += "        });";
+    page += "    } catch (e) {";
+    page += "      markFaceUnavailable('Face: Unavailable');";
+    page += "      console.error('BlazeFace init error:', e);";
+    page += "    }";
+    page += "  }";
 
-    page += "  cocoSsd.load()";
-    page += "    .then(function(m) {";
-    page += "      objModel = m;";
-    page += "      var b = document.getElementById('objBtn');";
-    page += "      b.disabled = false; b.style.backgroundColor='lightgrey';";
-    page += "      b.innerHTML = '<b>Objects: OFF</b>';";
-    page += "    })";
-    page += "    .catch(function(e) {";
-    page += "      document.getElementById('objBtn').innerHTML='<b>Objects: No Internet</b>';";
-    page += "      console.error('COCO-SSD load failed:', e);";
-    page += "    });";
+    page += "  function loadObjectModel() {";
+    page += "    try {";
+    page += "      if (typeof cocoSsd === 'undefined' || !cocoSsd.load) {";
+    page += "        markObjUnavailable('Objects: Unavailable');";
+    page += "        return;";
+    page += "      }";
+    page += "      cocoSsd.load()";
+    page += "        .then(function(m) {";
+    page += "          objModel = m;";
+    page += "          objBtn.disabled = false;";
+    page += "          objBtn.style.backgroundColor = 'lightgrey';";
+    page += "          objBtn.innerHTML = '<b>Objects: OFF</b>';";
+    page += "        })";
+    page += "        .catch(function(e) {";
+    page += "          markObjUnavailable('Objects: No Internet');";
+    page += "          console.error('COCO-SSD load failed:', e);";
+    page += "        });";
+    page += "    } catch (e) {";
+    page += "      markObjUnavailable('Objects: Unavailable');";
+    page += "      console.error('COCO-SSD init error:', e);";
+    page += "    }";
+    page += "  }";
 
+    page += "  setTimeout(loadFaceModel, 0);";
+    page += "  setTimeout(loadObjectModel, 0);";
+    page += "  setTimeout(function(){ if(!faceModel && faceBtn.innerText.indexOf('Loading') >= 0) markFaceUnavailable('Face: Timeout'); }, 12000);";
+    page += "  setTimeout(function(){ if(!objModel && objBtn.innerText.indexOf('Loading') >= 0) markObjUnavailable('Objects: Timeout'); }, 12000);";
     page += "});"; // end window load listener
 
     page += "</script>";

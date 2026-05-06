@@ -538,64 +538,56 @@ static esp_err_t index_handler(httpd_req_t *req){
     // guard conditions (faceOn && faceModel) prevent any model calls until ready.
     page += "renderFrame();";
 
-    // Robust model loader: never leave UI stuck on Loading if CDN/global init fails.
-    page += "window.addEventListener('load', function() {";
-    page += "  var faceBtn = document.getElementById('faceBtn');";
-    page += "  var objBtn  = document.getElementById('objBtn');";
-    page += "  function markFaceUnavailable(msg){ faceBtn.disabled = true; faceBtn.style.backgroundColor='lightgrey'; faceBtn.innerHTML = '<b>' + msg + '</b>'; }";
-    page += "  function markObjUnavailable(msg){ objBtn.disabled = true; objBtn.style.backgroundColor='lightgrey'; objBtn.innerHTML = '<b>' + msg + '</b>'; }";
+    // Offline-safe model loader: retries without relying on window load.
+    page += "var faceInitStarted = false;";
+    page += "var objInitStarted  = false;";
+    page += "function setFaceState(label, enabled){ var b=document.getElementById('faceBtn'); if(!b) return; b.disabled=!enabled; b.style.backgroundColor='lightgrey'; b.innerHTML='<b>'+label+'</b>'; }";
+    page += "function setObjState(label, enabled){ var b=document.getElementById('objBtn'); if(!b) return; b.disabled=!enabled; b.style.backgroundColor='lightgrey'; b.innerHTML='<b>'+label+'</b>'; }";
 
-    page += "  function loadFaceModel() {";
-    page += "    try {";
-    page += "      if (typeof blazeface === 'undefined' || !blazeface.load) {";
-    page += "        markFaceUnavailable('Face: Unavailable');";
-    page += "        return;";
-    page += "      }";
-    page += "      blazeface.load()";
-    page += "        .then(function(m) {";
-    page += "          faceModel = m;";
-    page += "          faceBtn.disabled = false;";
-    page += "          faceBtn.style.backgroundColor = 'lightgrey';";
-    page += "          faceBtn.innerHTML = '<b>Faces: OFF</b>';";
-    page += "        })";
-    page += "        .catch(function(e) {";
-    page += "          markFaceUnavailable('Face: No Internet');";
-    page += "          console.error('BlazeFace load failed:', e);";
-    page += "        });";
-    page += "    } catch (e) {";
-    page += "      markFaceUnavailable('Face: Unavailable');";
-    page += "      console.error('BlazeFace init error:', e);";
+    page += "function startFaceInitRetry(){";
+    page += "  if(faceInitStarted) return;";
+    page += "  faceInitStarted = true;";
+    page += "  if(!navigator.onLine){ setFaceState('Face: Offline', false); return; }";
+    page += "  var attempts = 0;";
+    page += "  var maxAttempts = 40;";
+    page += "  function tryFace(){";
+    page += "    if(faceModel) return;";
+    page += "    attempts++;";
+    page += "    if(typeof blazeface !== 'undefined' && blazeface.load){";
+    page += "      blazeface.load().then(function(m){ faceModel = m; setFaceState('Faces: OFF', true); }).catch(function(e){ setFaceState(navigator.onLine ? 'Face: Error' : 'Face: Offline', false); console.error('BlazeFace load failed:', e); });";
+    page += "      return;";
     page += "    }";
+    page += "    if(attempts >= maxAttempts){ setFaceState(navigator.onLine ? 'Face: Unavailable' : 'Face: Offline', false); return; }";
+    page += "    setTimeout(tryFace, 300);";
     page += "  }";
+    page += "  tryFace();";
+    page += "}";
 
-    page += "  function loadObjectModel() {";
-    page += "    try {";
-    page += "      if (typeof cocoSsd === 'undefined' || !cocoSsd.load) {";
-    page += "        markObjUnavailable('Objects: Unavailable');";
-    page += "        return;";
-    page += "      }";
-    page += "      cocoSsd.load()";
-    page += "        .then(function(m) {";
-    page += "          objModel = m;";
-    page += "          objBtn.disabled = false;";
-    page += "          objBtn.style.backgroundColor = 'lightgrey';";
-    page += "          objBtn.innerHTML = '<b>Objects: OFF</b>';";
-    page += "        })";
-    page += "        .catch(function(e) {";
-    page += "          markObjUnavailable('Objects: No Internet');";
-    page += "          console.error('COCO-SSD load failed:', e);";
-    page += "        });";
-    page += "    } catch (e) {";
-    page += "      markObjUnavailable('Objects: Unavailable');";
-    page += "      console.error('COCO-SSD init error:', e);";
+    page += "function startObjInitRetry(){";
+    page += "  if(objInitStarted) return;";
+    page += "  objInitStarted = true;";
+    page += "  if(!navigator.onLine){ setObjState('Objects: Offline', false); return; }";
+    page += "  var attempts = 0;";
+    page += "  var maxAttempts = 40;";
+    page += "  function tryObj(){";
+    page += "    if(objModel) return;";
+    page += "    attempts++;";
+    page += "    if(typeof cocoSsd !== 'undefined' && cocoSsd.load){";
+    page += "      cocoSsd.load().then(function(m){ objModel = m; setObjState('Objects: OFF', true); }).catch(function(e){ setObjState(navigator.onLine ? 'Objects: Error' : 'Objects: Offline', false); console.error('COCO-SSD load failed:', e); });";
+    page += "      return;";
     page += "    }";
+    page += "    if(attempts >= maxAttempts){ setObjState(navigator.onLine ? 'Objects: Unavailable' : 'Objects: Offline', false); return; }";
+    page += "    setTimeout(tryObj, 300);";
     page += "  }";
+    page += "  tryObj();";
+    page += "}";
 
-    page += "  setTimeout(loadFaceModel, 0);";
-    page += "  setTimeout(loadObjectModel, 0);";
-    page += "  setTimeout(function(){ if(!faceModel && faceBtn.innerText.indexOf('Loading') >= 0) markFaceUnavailable('Face: Timeout'); }, 12000);";
-    page += "  setTimeout(function(){ if(!objModel && objBtn.innerText.indexOf('Loading') >= 0) markObjUnavailable('Objects: Timeout'); }, 12000);";
-    page += "});"; // end window load listener
+    page += "document.addEventListener('DOMContentLoaded', function(){";
+    page += "  startFaceInitRetry();";
+    page += "  startObjInitRetry();";
+    page += "  setTimeout(function(){ if(!faceModel){ var b=document.getElementById('faceBtn'); if(b && b.innerText.indexOf('Loading') >= 0) setFaceState(navigator.onLine ? 'Face: Timeout' : 'Face: Offline', false); } }, 12000);";
+    page += "  setTimeout(function(){ if(!objModel){ var b=document.getElementById('objBtn'); if(b && b.innerText.indexOf('Loading') >= 0) setObjState(navigator.onLine ? 'Objects: Timeout' : 'Objects: Offline', false); } }, 12000);";
+    page += "});";
 
     page += "</script>";
 

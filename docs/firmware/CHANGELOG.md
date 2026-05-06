@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed — File layout and docs split
 
-- Moved active UI source from `firmware/web/index.html` to `firmware/index.html` so it sits at the same level as firmware source files.
+- Consolidated firmware web delivery around embedded payload in `camera_index.h`.
 - Switched runtime web UI delivery to embedded payload (`camera_index.h`) served directly by firmware.
 - Extracted procedural flashing/upload instructions from firmware README into `docs/firmware/SETUP.md`.
 - Refocused `docs/firmware/README.md` to architecture and API reference only.
@@ -19,9 +19,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 **Branch:** `nekolaiv/web-sync`
 
-#### `web/index.html` (new file)
-- Created a standalone web UI source file, separated from C++ handler logic.
-- Editing this file requires regenerating `camera_index.h` and reflashing firmware.
+#### Embedded web payload workflow
+- Web UI is shipped from the embedded payload in `camera_index.h`.
+- Updating UI requires replacing payload bytes in `camera_index.h` and reflashing firmware.
 - **Layout and features mirror the Flutter mobile app:**
   - Live MJPEG stream rendered on a `<canvas>` element.
   - Camera orientation chips: Normal, Rotate 180, Rotate 180 + Mirror.

@@ -24,7 +24,6 @@ Motor GPIO mapping:
 - `firmware/ESP32CAM_Car.ino`: Entry point, Wi-Fi, camera init, starts web/stream servers
 - `firmware/app_httpd.cpp`: HTTP handlers, control endpoints, stream endpoint
 - `firmware/camera_index.h`: Embedded gzipped web payload served by firmware
-- `firmware/index.html`: Source used to regenerate `camera_index.h`
 
 ## Network model
 
@@ -50,7 +49,7 @@ Motor GPIO mapping:
 ## Embedded web UI delivery
 
 - Firmware serves the embedded web payload from `camera_index.h`
-- UI updates require regenerating `camera_index.h` and reflashing firmware
+- UI updates require updating `camera_index.h` and reflashing firmware
 - If embedded payload is unavailable, firmware serves a minimal built-in fallback control page
 
 ## Web UI scope

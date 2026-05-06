@@ -322,16 +322,11 @@ static const char FALLBACK_PAGE[] =
 static esp_err_t index_handler(httpd_req_t *req){
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 
-    // Primary delivery path: merged firmware UI from camera_index.h.
+    // Serve the runtime page directly so UI updates do not depend on payload regeneration.
     httpd_resp_set_type(req, "text/html");
-    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    if (index_html_gz_len > 0) {
-        return httpd_resp_send(req, (const char*)index_html_gz, index_html_gz_len);
-    }
-
-    // Safety fallback if embedded artifact is unexpectedly unavailable.
-    return httpd_resp_send(req, FALLBACK_PAGE, strlen(FALLBACK_PAGE));
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate");
+    httpd_resp_set_hdr(req, "Pragma", "no-cache");
+    httpd_resp_set_hdr(req, "Expires", "0");
 
     // ── Legacy inline page below is preserved as reference only ─────────────
     // Delete from here to the closing brace if you want to slim the binary.
@@ -579,6 +574,7 @@ static esp_err_t index_handler(httpd_req_t *req){
     page += "</script>";
 
     // CV Features section
+    page += "<p align=center style='font-size:12px;color:#666;margin:2px 0 10px;'>Firmware UI v2 (live page)</p>";
     page += "<div style='text-align:center;margin-top:10px;'>";
     page += "<span style='font-size:11px;color:#999;letter-spacing:1px;'>&#9473;&#9473; CV FEATURES &#9473;&#9473;</span>";
     page += "</div>";
@@ -643,7 +639,7 @@ static esp_err_t index_handler(httpd_req_t *req){
 
     page += "</div>"; // end settingsPanel
 
-    return httpd_resp_send(req, &page[0], strlen(&page[0]));
+    return httpd_resp_send(req, page.c_str(), page.length());
 }
 
 static esp_err_t capabilities_handler(httpd_req_t *req){
